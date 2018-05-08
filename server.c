@@ -48,7 +48,7 @@ int handlePacket(int state, int mySocket, struct packet *packet, struct sockaddr
 			if (resendCount >= MAX_RESENDS){
 				resendCount = 0;
 				state = INIT;
-				printf("connection timed out\n");
+				printf("CONNECTION TIMEOUT GOING TO CLOSED\n");
 			}
 			else if (packet == NULL){//packet == NULL -> timeout
 				myPacket = createPacket(SYNACK, 0, 0, 0, 0, NULL);
@@ -59,14 +59,14 @@ int handlePacket(int state, int mySocket, struct packet *packet, struct sockaddr
 			else if (packet->flags == ACK){
 				resendCount = 0;
 				state = WAIT;
-				printf("connection success\n");
+				printf("CONNECTION SUCCESS GOING TO DATA TRANSMISSION\n");
 			}
 			break;
 			
 		//sliding window
 			
 		case WAIT:
-			printf("WAIT state\n");
+			printf("DATA RECEIVE STATE\n");
 			if (packet != NULL && packet->flags == FIN){
 				printf("FIN received from %s:%d\n", inet_ntoa(source->sin_addr), ntohs(source->sin_port));
 				myPacket = createPacket(ACK, 0, 0, 0, 0, NULL);
@@ -92,7 +92,7 @@ int handlePacket(int state, int mySocket, struct packet *packet, struct sockaddr
 			if (resendCount >= MAX_RESENDS){
 				resendCount = 0;
 				state = INIT;
-				printf("Max resends reached, shuting down connection...\n");
+				printf("MAX RESENDS REACHED GOING TO CLOSED\n");
 			}
 			else if (packet == NULL){
 				myPacket = createPacket(FIN, 0, 0, 0, 0, NULL);
@@ -104,7 +104,7 @@ int handlePacket(int state, int mySocket, struct packet *packet, struct sockaddr
 				printf("ACK received from %s:%d\n", inet_ntoa(source->sin_addr), ntohs(source->sin_port));
 				resendCount = 0;
 				state = INIT;
-				printf("Connection shut down successfully\n");
+				printf("CONNECTION SHUTDOWN SUCCESSFULLY GOING TO CLOSED\n");
 			}
 			break;
 			
