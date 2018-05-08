@@ -10,6 +10,7 @@
 
 
 #define bla 123
+#define blaa 1234
 // SETTINGS
 #define TIMEOUT 1000 // The time before timeout in milliseconds
 #define MAX_RESENDS 10
