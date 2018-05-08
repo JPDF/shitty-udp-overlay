@@ -3,6 +3,7 @@
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <sys/types.h>
+#include <arpa/inet.h>
 #include <string.h>
 #include "packet.h"
 #include "misc.h"
@@ -14,7 +15,8 @@
 
 // STATES
 #define INIT 0
-#define SYN_RECEIVED 1
+#define LISTEN 1
+#define SYN_RECEIVED 2
 //sliding window states
 #define WAIT 10
 #define FRAME_RECEIVED 11
@@ -29,11 +31,15 @@ int handlePacket(int state, int mySocket, struct packet *packet, struct sockaddr
 	struct packet myPacket;
 	switch (state) {
 		case INIT:
+			printf("Waiting for connection...\n");
+			state = LISTEN;
+			break;
+		case LISTEN:
 			if (packet != NULL && packet->flags == SYN) {
-				printf("SYN received\n");
+				printf("SYN received from %s:%d\n", inet_ntoa(source->sin_addr), ntohs(source->sin_port));
 				myPacket = createPacket(SYNACK, 0, 0, 0, 0, NULL);
 				sendPacket(mySocket, &myPacket, source);
-				printf("SYNACK sent\n");
+				printf("SYNACK sent to %s:%d\n", inet_ntoa(source->sin_addr), ntohs(source->sin_port));
 				state = SYN_RECEIVED;
 			}
 			break;
@@ -47,7 +53,7 @@ int handlePacket(int state, int mySocket, struct packet *packet, struct sockaddr
 			else if (packet == NULL){//packet == NULL -> timeout
 				myPacket = createPacket(SYNACK, 0, 0, 0, 0, NULL);
 				sendPacket(mySocket, &myPacket, source);
-				printf("SYNACK resent\n");
+				printf("SYNACK resent to %s:%d\n", inet_ntoa(source->sin_addr), ntohs(source->sin_port));
 				resendCount++;
 			}
 			else if (packet->flags == ACK){
@@ -62,9 +68,10 @@ int handlePacket(int state, int mySocket, struct packet *packet, struct sockaddr
 		case WAIT:
 			printf("WAIT state\n");
 			if (packet != NULL && packet->flags == FIN){
-				printf("FIN received\n");
+				printf("FIN received from %s:%d\n", inet_ntoa(source->sin_addr), ntohs(source->sin_port));
 				myPacket = createPacket(ACK, 0, 0, 0, 0, NULL);
 				sendPacket(mySocket, &myPacket, source);
+				printf("ACK sent to %s:%d\n", inet_ntoa(source->sin_addr), ntohs(source->sin_port));
 				state = CLOSE_WAIT;
 				}
 			break;
@@ -77,7 +84,7 @@ int handlePacket(int state, int mySocket, struct packet *packet, struct sockaddr
 		case CLOSE_WAIT:
 			myPacket = createPacket(FIN, 0, 0, 0, 0, NULL);
 			sendPacket(mySocket, &myPacket, source);
-			printf("FIN sent\n");
+			printf("FIN sent to %s:%d\n", inet_ntoa(source->sin_addr), ntohs(source->sin_port));
 			state = LAST_ACK;
 			break;
 			
@@ -90,10 +97,11 @@ int handlePacket(int state, int mySocket, struct packet *packet, struct sockaddr
 			else if (packet == NULL){
 				myPacket = createPacket(FIN, 0, 0, 0, 0, NULL);
 				sendPacket(mySocket, &myPacket, source);
-				printf("FIN resent\n");
+				printf("FIN resent to %s:%d\n", inet_ntoa(source->sin_addr), ntohs(source->sin_port));
 				resendCount++;
 			}
 			else if (packet->flags == ACK){
+				printf("ACK received from %s:%d\n", inet_ntoa(source->sin_addr), ntohs(source->sin_port));
 				resendCount = 0;
 				state = INIT;
 				printf("Connection shut down successfully\n");
@@ -122,9 +130,7 @@ int main() {
 	// Bind to a specific port
 	if (bind(mySocket, (struct sockaddr*)&address, sizeof(address)) == -1)
 		fatalerror("Failed to bind socket");
-	
-	printf("Waiting for connection...\n");
-	
+		
 	int state = INIT;
 	int bytesRead = 0;
 	struct client client = { 0 };
@@ -132,7 +138,6 @@ int main() {
 	struct sockaddr_in source;
 	// Event handling loop
 	while (1) {
-		bytesRead = receivePacket(mySocket, &packet, &source);
 		if (bytesRead == -1)
 			fatalerror("Failed to receive packet");
 		else if (bytesRead == 0) // checks if timeout
@@ -140,6 +145,7 @@ int main() {
 		else 
 			state = handlePacket(state, mySocket, &packet, &source, &client);
 		fflush(stdout);
+		bytesRead = waitAndReceivePacket(mySocket, &packet, &source, TIMEOUT);
 	}
 	return 0;
 }
