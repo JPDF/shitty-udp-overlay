@@ -64,7 +64,13 @@ int handlePacket(int state, int mySocket, struct packet *packet, struct sockaddr
 			break;
 		case ACK_SENT: //TODO: LÄGG TILL TIMEOUT EFTER X ANTAL SKICKADE PAKET
 			timer++;
-			if(resendCount == MAX_RESENDS){
+			if (packet != NULL && packet->flags == SYNACK) {
+				resendCount++;
+				myPacket = createPacket(ACK, 0, 0, 0, 0, NULL);
+				sendPacket(mySocket, &myPacket, source);
+				printf("ACK resent to %s:%d\n", (char*)inet_ntoa(source->sin_addr), ntohs(source->sin_port));
+			}
+			else if(resendCount == MAX_RESENDS){
 			resendCount = 0;
 			printf("MAX resends reached going to CLOSED");
 			state = CLOSED;
@@ -74,12 +80,6 @@ int handlePacket(int state, int mySocket, struct packet *packet, struct sockaddr
 				timer = 0;
 				printf("TIMEOUT in ACK_SENT going to DATA_TRANSMISSION\n");
  				state = DATA_TRANSMISSION;
-			}
-			else if (packet != NULL && packet->flags == SYNACK) {
-				resendCount++;
-				myPacket = createPacket(ACK, 0, 0, 0, 0, NULL);
-				sendPacket(mySocket, &myPacket, source);
-				printf("ACK resent to %s:%d\n", (char*)inet_ntoa(source->sin_addr), ntohs(source->sin_port));
 			}
 			
 			break;
