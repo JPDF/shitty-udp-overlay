@@ -69,7 +69,7 @@ int handlePacket(int state, int mySocket, struct packet *packet, struct sockaddr
 			printf("MAX resends reached going to CLOSED");
 			state = CLOSED;
 			}
-			else if (packet == NULL && resendCount == timer) { // TIMEOUT!
+			else if (packet == NULL && timer == MAX_RESENDS) { // TIMEOUT!
 				resendCount = 0;
 				timer = 0;
 				printf("TIMEOUT in ACK_SENT going to DATA_TRANSMISSION\n");
