@@ -38,8 +38,8 @@ int receivePacket(const int mySocket, struct packet *packet, struct sockaddr_in 
 }
 
 int sendPacket(const int mySocket, const struct packet *packet, const struct sockaddr_in *destination) {
-	int chance = rand()%2;
-	if (chance == 0)
-		return 0;
+	//int chance = rand()%2;
+	//if (chance == 0)
+	//	return 0;
 	return sendto(mySocket, packet, sizeof(*packet), 0, (struct sockaddr*)destination, sizeof(*destination));
 }

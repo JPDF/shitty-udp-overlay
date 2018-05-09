@@ -89,6 +89,7 @@ int handlePacket(int state, int mySocket, struct packet *packet, struct sockaddr
 			
 		case WAIT:
 			if(packet != NULL && packet->flags == FRAME){
+				printf(ANSI_WHITE"WAIT GOING TO FRAME_RECEIVED\n"ANSI_RESET);
 				state = FRAME_RECEIVED;
 				slidingWindowIndexLast = packet->windowsize-1;
 				while(state != WAIT){
@@ -96,23 +97,27 @@ int handlePacket(int state, int mySocket, struct packet *packet, struct sockaddr
 						case FRAME_RECEIVED:
 							if (slidingWindowIndexFirst < slidingWindowIndexLast){
 								if(packet->seq >= slidingWindowIndexFirst && packet->seq <= slidingWindowIndexLast){
+									printf(ANSI_WHITE"FRAME_RECEIVED GOING TO FRAME_IN_WINDOW\n"ANSI_RESET);
 									state = FRAME_IN_WINDOW;
 								}
 								else{
 									myPacket = createPacket(ACK, 0, 0, 0, 0, NULL);
 									sendPacket(mySocket, &myPacket, source);
-									printf(ANSI_GREEN"ACK sent to "ANSI_BLUE"%s"ANSI_GREEN":"ANSI_BLUE"%d\n"ANSI_RESET, inet_ntoa(source->sin_addr), ntohs(source->sin_port));
+									printf(ANSI_WHITE"FRAME_RECEIVED GOING TO WAIT - FRAME OUTSIDE WINDOW\n"ANSI_RESET);
+									printf(ANSI_GREEN"OUT D ACK sent to "ANSI_BLUE"%s"ANSI_GREEN":"ANSI_BLUE"%d\n"ANSI_RESET, inet_ntoa(source->sin_addr), ntohs(source->sin_port));
 									state = WAIT;
 								}
 							}
 							else if (slidingWindowIndexFirst > slidingWindowIndexLast){
 								if((packet->seq >= slidingWindowIndexFirst && packet->seq <= BUFFER_SIZE-1) || (packet->seq <= slidingWindowIndexLast && packet->seq >= 0)){
+									printf(ANSI_WHITE"FRAME_RECEIVED GOING TO FRAME_IN_WINDOW\n"ANSI_RESET);
 									state = FRAME_IN_WINDOW;
 								}
 								else{
 									myPacket = createPacket(ACK, 0, 0, 0, 0, NULL);
 									sendPacket(mySocket, &myPacket, source);
-									printf(ANSI_GREEN"ACK sent to "ANSI_BLUE"%s"ANSI_GREEN":"ANSI_BLUE"%d\n"ANSI_RESET, inet_ntoa(source->sin_addr), ntohs(source->sin_port));
+									printf(ANSI_WHITE"FRAME_RECEIVED GOING TO WAIT - FRAME OUTSIDE WINDOW\n"ANSI_RESET);
+									printf(ANSI_GREEN"OUT D ACK sent to "ANSI_BLUE"%s"ANSI_GREEN":"ANSI_BLUE"%d\n"ANSI_RESET, inet_ntoa(source->sin_addr), ntohs(source->sin_port));
 									state = WAIT;
 								}
 							}
@@ -122,7 +127,8 @@ int handlePacket(int state, int mySocket, struct packet *packet, struct sockaddr
 							if(packet->seq == slidingWindowIndexFirst){
 								myPacket = createPacket(ACK, 0, 0, 0, 0, NULL);
 								sendPacket(mySocket, &myPacket, source);
-								printf(ANSI_GREEN"ACK sent to "ANSI_BLUE"%s"ANSI_GREEN":"ANSI_BLUE"%d\n"ANSI_RESET, inet_ntoa(source->sin_addr), ntohs(source->sin_port));
+								printf(ANSI_WHITE"FRAME_IN_WINDOW GOING TO MOVE_WINDOW - FRAME IS FIRST\n"ANSI_RESET);
+								printf(ANSI_GREEN"D ACK sent to "ANSI_BLUE"%s"ANSI_GREEN":"ANSI_BLUE"%d\n"ANSI_RESET, inet_ntoa(source->sin_addr), ntohs(source->sin_port));
 								state = MOVE_WINDOW;
 							}
 							break;
@@ -139,23 +145,27 @@ int handlePacket(int state, int mySocket, struct packet *packet, struct sockaddr
 							slidingWindowIndexLast = 0;
 							slidingWindowIndexFirst++;
 							}
+							printf(ANSI_WHITE"MOVE_WINDOW GOING TO BUFFER\n"ANSI_RESET);
 							state = BUFFER;
 							
 							break;
 						case BUFFER:
 							if(windowBuffer[slidingWindowIndexFirst]!=NULL){
 								windowBuffer[slidingWindowIndexFirst] = NULL;
+								printf(ANSI_WHITE"BUFFER GOING TO MOVE_WINDOW\n"ANSI_RESET);
 								state = MOVE_WINDOW;
 							}
-							else
+							else{
+							printf(ANSI_WHITE"BUFFER GOING TO WAIT - NO FRAME IN BUFFER IS FIRST IN WINDOW\n"ANSI_RESET);
 							state = WAIT;
+							}
 							break;
 						
 					}
 				}
 			}
 				
-			if (packet != NULL && packet->flags == FIN){
+			else if (packet != NULL && packet->flags == FIN){
 				printf(ANSI_GREEN"FIN received from "ANSI_BLUE"%s"ANSI_GREEN":"ANSI_BLUE"%d\n"ANSI_RESET, inet_ntoa(source->sin_addr), ntohs(source->sin_port));
 				myPacket = createPacket(ACK, 0, 0, 0, 0, NULL);
 				sendPacket(mySocket, &myPacket, source);
