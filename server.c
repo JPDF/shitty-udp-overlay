@@ -29,15 +29,25 @@
 #define SYN_RECEIVED 2
 //sliding window states
 #define WAIT 10
-#define FRAME_RECEIVED 11
+#define FRAME_RECEIVED 101
+#define FRAME_IN_WINDOW 102
+#define MOVE_WINDOW 103
+#define BUFFER 104
 //TEARDOWN STATES
 #define CLOSE_WAIT 20
 #define LAST_ACK 21
+//SLIDING WINDOW SIZE
+#define BUFFER_SIZE 2
+#define WINDOW_SIZE BUFFER_SIZE/2
 
 /* Handles received packets and set the state accordingly.
    Packet is NULL if timeout occured */
 int handlePacket(int state, int mySocket, struct packet *packet, struct sockaddr_in *source, struct client *client) {
 	static int resendCount = 0;
+	static int slidingWindowSize = WINDOW_SIZE;
+	static int slidingWindowIndexFirst = 0, slidingWindowIndexLast = 0;
+	static struct packet *windowBuffer[BUFFER_SIZE];
+	
 	struct packet myPacket;
 	switch (state) {
 		case INIT:
@@ -78,7 +88,73 @@ int handlePacket(int state, int mySocket, struct packet *packet, struct sockaddr
 		//sliding window
 			
 		case WAIT:
-			printf(ANSI_MAGENTA"DATA RECEIVE STATE\n"ANSI_RESET);
+			if(packet != NULL && packet->flags == FRAME){
+				state = FRAME_RECEIVED;
+				slidingWindowIndexLast = packet->windowsize-1;
+				while(state != WAIT){
+					switch (state) {
+						case FRAME_RECEIVED:
+							if (slidingWindowIndexFirst < slidingWindowIndexLast){
+								if(packet->seq >= slidingWindowIndexFirst && packet->seq <= slidingWindowIndexLast){
+									state = FRAME_IN_WINDOW;
+								}
+								else{
+									myPacket = createPacket(ACK, 0, 0, 0, 0, NULL);
+									sendPacket(mySocket, &myPacket, source);
+									printf(ANSI_GREEN"ACK sent to "ANSI_BLUE"%s"ANSI_GREEN":"ANSI_BLUE"%d\n"ANSI_RESET, inet_ntoa(source->sin_addr), ntohs(source->sin_port));
+									state = WAIT;
+								}
+							}
+							else if (slidingWindowIndexFirst > slidingWindowIndexLast){
+								if((packet->seq >= slidingWindowIndexFirst && packet->seq <= BUFFER_SIZE-1) || (packet->seq <= slidingWindowIndexLast && packet->seq >= 0)){
+									state = FRAME_IN_WINDOW;
+								}
+								else{
+									myPacket = createPacket(ACK, 0, 0, 0, 0, NULL);
+									sendPacket(mySocket, &myPacket, source);
+									printf(ANSI_GREEN"ACK sent to "ANSI_BLUE"%s"ANSI_GREEN":"ANSI_BLUE"%d\n"ANSI_RESET, inet_ntoa(source->sin_addr), ntohs(source->sin_port));
+									state = WAIT;
+								}
+							}
+							//TODO: ELSE IF FOR BROKEN FRAME THAT SENDS A NAK
+							break;
+						case FRAME_IN_WINDOW:
+							if(packet->seq == slidingWindowIndexFirst){
+								myPacket = createPacket(ACK, 0, 0, 0, 0, NULL);
+								sendPacket(mySocket, &myPacket, source);
+								printf(ANSI_GREEN"ACK sent to "ANSI_BLUE"%s"ANSI_GREEN":"ANSI_BLUE"%d\n"ANSI_RESET, inet_ntoa(source->sin_addr), ntohs(source->sin_port));
+								state = MOVE_WINDOW;
+							}
+							break;
+						case MOVE_WINDOW:
+							if(slidingWindowIndexFirst != BUFFER_SIZE-1 && slidingWindowIndexLast != BUFFER_SIZE-1){
+							slidingWindowIndexFirst++;
+							slidingWindowIndexLast++;
+							}
+							else if(slidingWindowIndexFirst == BUFFER_SIZE-1){
+							slidingWindowIndexFirst = 0;
+							slidingWindowIndexLast++;
+							}
+							else if(slidingWindowIndexLast == BUFFER_SIZE-1){
+							slidingWindowIndexLast = 0;
+							slidingWindowIndexFirst++;
+							}
+							state = BUFFER;
+							
+							break;
+						case BUFFER:
+							if(windowBuffer[slidingWindowIndexFirst]!=NULL){
+								windowBuffer[slidingWindowIndexFirst] = NULL;
+								state = MOVE_WINDOW;
+							}
+							else
+							state = WAIT;
+							break;
+						
+					}
+				}
+			}
+				
 			if (packet != NULL && packet->flags == FIN){
 				printf(ANSI_GREEN"FIN received from "ANSI_BLUE"%s"ANSI_GREEN":"ANSI_BLUE"%d\n"ANSI_RESET, inet_ntoa(source->sin_addr), ntohs(source->sin_port));
 				myPacket = createPacket(ACK, 0, 0, 0, 0, NULL);
@@ -87,9 +163,6 @@ int handlePacket(int state, int mySocket, struct packet *packet, struct sockaddr
 				printf(ANSI_WHITE"DATA RECEIVE STATE GOING TO CLOSE_WAIT\n"ANSI_RESET);
 				state = CLOSE_WAIT;
 				}
-			break;
-			
-		case FRAME_RECEIVED:
 			break;
 			
 		//TEARDOWN

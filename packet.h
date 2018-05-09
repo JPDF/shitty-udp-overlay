@@ -10,6 +10,7 @@
 #define SYNACK 2 
 #define ACK 3
 #define FIN 4
+#define FRAME 5
 
 struct packet{
 	int flags;
