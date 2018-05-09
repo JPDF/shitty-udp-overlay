@@ -50,6 +50,7 @@ int handlePacket(int state, int mySocket, struct packet *packet, struct sockaddr
 				myPacket = createPacket(SYNACK, 0, 0, 0, 0, NULL);
 				sendPacket(mySocket, &myPacket, source);
 				printf(ANSI_GREEN"SYNACK sent to "ANSI_BLUE"%s"ANSI_GREEN":"ANSI_BLUE"%d\n"ANSI_RESET, inet_ntoa(source->sin_addr), ntohs(source->sin_port));
+				printf(ANSI_WHITE"LISTEN GOING TO SYN_RECEIVED\n"ANSI_RESET);
 				state = SYN_RECEIVED;
 			}
 			break;
@@ -69,6 +70,7 @@ int handlePacket(int state, int mySocket, struct packet *packet, struct sockaddr
 			else if (packet->flags == ACK){
 				resendCount = 0;
 				state = WAIT;
+				printf(ANSI_GREEN"ACK received from "ANSI_BLUE"%s"ANSI_GREEN":"ANSI_BLUE"%d\n"ANSI_RESET, inet_ntoa(source->sin_addr), ntohs(source->sin_port));
 				printf(ANSI_WHITE"CONNECTION SUCCESS GOING TO DATA TRANSMISSION\n"ANSI_RESET);
 			}
 			break;
@@ -76,12 +78,13 @@ int handlePacket(int state, int mySocket, struct packet *packet, struct sockaddr
 		//sliding window
 			
 		case WAIT:
-			printf("DATA RECEIVE STATE\n");
+			printf(ANSI_MAGENTA"DATA RECEIVE STATE\n"ANSI_RESET);
 			if (packet != NULL && packet->flags == FIN){
-				printf("FIN received from %s:%d\n", inet_ntoa(source->sin_addr), ntohs(source->sin_port));
+				printf(ANSI_GREEN"FIN received from "ANSI_BLUE"%s"ANSI_GREEN":"ANSI_BLUE"%d\n"ANSI_RESET, inet_ntoa(source->sin_addr), ntohs(source->sin_port));
 				myPacket = createPacket(ACK, 0, 0, 0, 0, NULL);
 				sendPacket(mySocket, &myPacket, source);
-				printf("ACK sent to %s:%d\n", inet_ntoa(source->sin_addr), ntohs(source->sin_port));
+				printf(ANSI_GREEN"ACK sent to "ANSI_BLUE"%s"ANSI_GREEN":"ANSI_BLUE"%d\n"ANSI_RESET, inet_ntoa(source->sin_addr), ntohs(source->sin_port));
+				printf(ANSI_WHITE"DATA RECEIVE STATE GOING TO CLOSE_WAIT\n"ANSI_RESET);
 				state = CLOSE_WAIT;
 				}
 			break;
@@ -94,7 +97,8 @@ int handlePacket(int state, int mySocket, struct packet *packet, struct sockaddr
 		case CLOSE_WAIT:
 			myPacket = createPacket(FIN, 0, 0, 0, 0, NULL);
 			sendPacket(mySocket, &myPacket, source);
-			printf("FIN sent to %s:%d\n", inet_ntoa(source->sin_addr), ntohs(source->sin_port));
+			printf(ANSI_GREEN"FIN sent to "ANSI_BLUE"%s"ANSI_GREEN":"ANSI_BLUE"%d\n"ANSI_RESET, inet_ntoa(source->sin_addr), ntohs(source->sin_port));
+			printf(ANSI_WHITE"CLOSE_WAIT GOING TO LAST_ACK\n"ANSI_RESET);
 			state = LAST_ACK;
 			break;
 			
@@ -102,19 +106,19 @@ int handlePacket(int state, int mySocket, struct packet *packet, struct sockaddr
 			if (resendCount >= MAX_RESENDS){
 				resendCount = 0;
 				state = INIT;
-				printf("MAX RESENDS REACHED GOING TO CLOSED\n");
+				printf(ANSI_WHITE "MAX RESENDS REACHED - LAST_ACK GOING TO CLOSED\n"ANSI_RESET);
 			}
 			else if (packet == NULL){
 				myPacket = createPacket(FIN, 0, 0, 0, 0, NULL);
 				sendPacket(mySocket, &myPacket, source);
-				printf("FIN resent to %s:%d\n", inet_ntoa(source->sin_addr), ntohs(source->sin_port));
+				printf(ANSI_RESET"FIN resent to "ANSI_BLUE"%s"ANSI_RED":"ANSI_BLUE"%d\n"ANSI_RESET, inet_ntoa(source->sin_addr), ntohs(source->sin_port));
 				resendCount++;
 			}
 			else if (packet->flags == ACK){
-				printf("ACK received from %s:%d\n", inet_ntoa(source->sin_addr), ntohs(source->sin_port));
+				printf(ANSI_GREEN"ACK received from "ANSI_BLUE"%s"ANSI_GREEN":"ANSI_BLUE"%d\n"ANSI_RESET, inet_ntoa(source->sin_addr), ntohs(source->sin_port));
 				resendCount = 0;
 				state = INIT;
-				printf("CONNECTION SHUTDOWN SUCCESSFULLY GOING TO CLOSED\n");
+				printf(ANSI_WHITE"CONNECTION SHUTDOWN SUCCESSFULLY - LAST_ACK GOING TO CLOSED\n"ANSI_RESET);
 			}
 			break;
 			
