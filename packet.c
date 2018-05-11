@@ -1,5 +1,6 @@
 #include "packet.h"
 #include <netinet/in.h>
+#include <stdlib.h>
 #include <time.h>
 
 struct packet createPacket(int flags, int id, int seq, int windowsize, int crc, char *data) {
@@ -26,9 +27,9 @@ int waitAndReceivePacket(const int mySocket, struct packet *packet, struct socka
 	if (readyFDs == -1) {
 		return -1;
 	}
-	else if (readyFDs > 0) {
-		return receivePacket(mySocket, packet, source);
-	}
+	else if (readyFDs == 0)
+		return 1;
+	receivePacket(mySocket, packet, source);
 	return 0;
 }
 
@@ -41,5 +42,8 @@ int sendPacket(const int mySocket, const struct packet *packet, const struct soc
 	//int chance = rand()%2;
 	//if (chance == 0)
 	//	return 0;
-	return sendto(mySocket, packet, sizeof(*packet), 0, (struct sockaddr*)destination, sizeof(*destination));
+	if (sendto(mySocket, packet, sizeof(*packet), 0, (struct sockaddr*)destination, sizeof(*destination)) == -1) {
+		perror("Failed to send");
+		exit(EXIT_FAILURE);
+	}
 }
