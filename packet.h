@@ -30,15 +30,16 @@ struct packet createPacket(int flags, int id, int seq, int windowsize, int crc, 
  *	packet: The received packet
  *	source: The source from the received packet
  *	timeout: time before timeout in milliseconds
- * Returns 1 on timeout, else 0 */
-int receivePacketWithTimeout(const int mySocket, struct packet *packet, struct sockaddr_in *source, const int timeout);
-void receivePacket(const int mySocket, struct packet *packet, struct sockaddr_in *source); // Blocks until packet received
+ * Returns -1 on error, 0 on timeout or amounts of bytes read */
+int waitAndReceivePacket(const int mySocket, struct packet *packet, struct sockaddr_in *source, const int timeout);
+int receivePacket(const int mySocket, struct packet *packet, struct sockaddr_in *source); // Blocks until packet received
 
 /* Simply sends a packet to destination
 	* Parameters:
  *	mySocket: socket file descriptor
  *	packet: The packet to send
- *	destination: The destination to send the packet */
-void sendPacket(const int mySocket, const struct packet *packet, const struct sockaddr_in *destination);
+ *	destination: The destination to send the packet
+ * Returns -1 on error, 0 on timeout or amounts of bytes read */
+int sendPacket(const int mySocket, const struct packet *packet, const struct sockaddr_in *destination);
 
 #endif
