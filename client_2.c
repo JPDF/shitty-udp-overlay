@@ -5,7 +5,6 @@
 #include <arpa/inet.h>
 #include <sys/types.h>
 #include <string.h>
-#include <unistd.h>
 #include "packet.h"
 #include "color.h"
 #include "error.h"
@@ -75,7 +74,7 @@ void connectTo(int socket, const struct sockaddr_in *destination, struct client 
 					// Saving settings received from server
 					client->windowsize = packet.windowsize;
 					client->id = packet.id;
-					sleep(4);
+					
 					printf(ANSI_GREEN"SYNACK received from "ANSI_CYAN"%s"ANSI_GREEN":"ANSI_CYAN"%d\n"ANSI_RESET, (char*)inet_ntoa(source.sin_addr), ntohs(source.sin_port));
 					packet = createPacket(ACK, 0, 0, packet.windowsize, 0, NULL);
 					sendPacket(socket, &packet, destination);
@@ -120,6 +119,31 @@ void insertToBuffer(int buffer[], int *bufferCount, int seq) {
 		}
 	}
 	(*bufferCount)++;
+}
+
+void asdf(int socket, const struct sockaddr_in *destination, const char **data, int dataCount, const struct client *client) {
+	int state = WAIT;
+	struct packet packet;
+	struct sockaddr_in source;
+	
+	
+	while (state != CLOSE) {
+		switch (state) {
+			case WAIT:
+				packet = createPacket(FRAME, );
+				sendPacket(socket, &packet, destination);
+				receivePacketWithTimeout(socket, &packet, &source, 1);
+				break;
+			case ACK_RECEIVED:
+				break;
+			case ACK_IN_WINDOW:
+				break;
+			case BUFFER:
+				break;
+			case MOVE_WINDOW:
+				break;
+		}
+	}
 }
 
 void slidingWindow(int socket, const struct sockaddr_in *destination, const char **data, int dataCount, const struct client *client) {
@@ -331,11 +355,7 @@ int main(int argc, char **argv) {
 	};
 	
 	while (1) {
-		connectTo(mySocket, &destination, &client);
 		
-		slidingWindow(mySocket, &destination, data, dataCount, &client);
-		
-		teardown(mySocket, &destination);
 	}
 	return 0;
 }
