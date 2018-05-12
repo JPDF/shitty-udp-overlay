@@ -74,12 +74,12 @@ int main(int argc, char **argv) {
 					createPacket(&packet, ACK, 0, 0, 0, NULL);
 					sendPacket(mySocket, &packet, &destination, 0);
 				}
-				else if(resendCount == MAX_RESENDS){
+				else if(resendCount >= MAX_RESENDS){
 					resendCount = 0;
 					printf("MAX resends reached going to CLOSED");
 					state = CLOSED;
 				}
-				else if (receiveStatus == RECEIVE_TIMEOUT && timer == MAX_RESENDS) { // TIMEOUT!
+				else if (receiveStatus == RECEIVE_TIMEOUT && timer >= MAX_RESENDS) { // TIMEOUT!
 					resendCount = 0;
 					timer = 0;
 					printf("TIMEOUT in ACK_SENT going to DATA_TRANSMISSION\n");
@@ -122,7 +122,7 @@ int main(int argc, char **argv) {
 					printf(ANSI_WHITE"FIN_WAIT_1 GOING TO CLOSING\n"ANSI_RESET);
 					state = CLOSING;
 				}
-				else if (resendCount == MAX_RESENDS) {
+				else if (resendCount >= MAX_RESENDS) {
 					resendCount = 0;
 					state = CLOSED;
 				}

@@ -95,7 +95,7 @@ void sendPacket(const int mySocket, const struct packet *packet, const struct so
 		if (sendto(mySocket, packet, sizeof(*packet), 0, (struct sockaddr*)destination, sizeof(*destination)) == -1)
 			fatalerror("Failed to send");
 	else
-		printf(ANSI_RED"SNEAKY NINJA THREW AWAY PACKAGE"ANSI_RESET);
+		printf(ANSI_RED"SNEAKY NINJA THREW AWAY PACKAGE\n"ANSI_RESET);
 }
 
 int isPacketBroken(struct packet *packet) {
