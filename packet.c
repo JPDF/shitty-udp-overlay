@@ -2,19 +2,45 @@
 #include <netinet/in.h>
 #include <stdlib.h>
 #include <time.h>
+#include <arpa/inet.h>
+#include <string.h>
+#include "misc.h"
 
-struct packet createPacket(int flags, int id, int seq, int windowsize, int crc, char *data) {
-	struct packet packet;
-	packet.flags = flags;
-	packet.id = id;
-	packet.seq = seq;
-	packet.windowsize = windowsize;
-	packet.crc = crc;
-	packet.data = data;
-	return packet;
+char *getFlagString(int flag) {
+	switch (flag) {
+		case SYN: return "SYN";
+		case SYNACK: return "SYNACK";
+		case ACK: return "ACK";
+		case FIN: return "FIN";
+		case FRAME: return "FRAME";
+		default: return "NOT DEFINED";
+	}
 }
 
-int waitAndReceivePacket(const int mySocket, struct packet *packet, struct sockaddr_in *source, const int timeout) {
+uint32_t crc32(const void *data, int size) {
+	unsigned int i, j;
+	uint32_t remainder = 0;
+	const uint8_t *bytes = (const uint8_t *)data;
+	for (i = 0; i < size; i++) { 
+		remainder ^= bytes[i];
+		for (j = 0; j < 8; j++) {
+			remainder = (remainder & 1) != 0 ? (remainder >> 1) ^ CRC_POLYNOM : remainder >> 1;
+		}
+	}
+	return remainder;
+}
+
+void createPacket(struct packet *packet, int flags, int id, int seq, int windowsize, char *data) {
+	packet->flags = flags;
+	packet->id = id;
+	packet->seq = seq;
+	packet->windowsize = windowsize;
+	packet->crc = 0;
+	packet->data = data;
+	packet->crc = crc32(packet, sizeof(*packet));
+}
+
+int receivePacketOrTimeout(const int mySocket, struct packet *packet, struct sockaddr_in *source, const int timeout) {
 	struct timeval timevalue;
 	timevalue.tv_sec = 0;
 	timevalue.tv_usec = timeout * 1000;
@@ -28,22 +54,58 @@ int waitAndReceivePacket(const int mySocket, struct packet *packet, struct socka
 		return -1;
 	}
 	else if (readyFDs == 0)
-		return 1;
-	receivePacket(mySocket, packet, source);
-	return 0;
+		return RECEIVE_TIMEOUT;
+	return receivePacket(mySocket, packet, source);
 }
 
 int receivePacket(const int mySocket, struct packet *packet, struct sockaddr_in *source) {
 	socklen_t addressSize = sizeof(*source);
-	return recvfrom(mySocket, packet, sizeof(struct packet), 0, (struct sockaddr*)source, &addressSize);
+	if (recvfrom(mySocket, packet, sizeof(struct packet), 0, (struct sockaddr*)source, &addressSize) == -1)
+		fatalerror("Failed to receive packet");
+	printf(ANSI_GREEN"RECEIVED: %s [id:"ANSI_BLUE"%d"ANSI_GREEN" seq:"ANSI_BLUE"%d"ANSI_GREEN" ws:"ANSI_BLUE"%d"ANSI_GREEN" data:"ANSI_BLUE"%s"ANSI_GREEN"] to"ANSI_BLUE" %s" ANSI_GREEN":" ANSI_BLUE"%d\n"ANSI_RESET,
+				 getFlagString(packet->flags),
+				 packet->id,
+				 packet->seq,
+				 packet->windowsize,
+				 packet->data,
+				 inet_ntoa(source->sin_addr),
+				 ntohs(source->sin_port));
+	if (isPacketBroken(packet))
+		return RECEIVE_BROKEN;
+	return RECEIVE_OK;
 }
 
-int sendPacket(const int mySocket, const struct packet *packet, const struct sockaddr_in *destination) {
-	//int chance = rand()%2;
-	//if (chance == 0)
-	//	return 0;
-	if (sendto(mySocket, packet, sizeof(*packet), 0, (struct sockaddr*)destination, sizeof(*destination)) == -1) {
-		perror("Failed to send");
-		exit(EXIT_FAILURE);
+void sendPacket(const int mySocket, const struct packet *packet, const struct sockaddr_in *destination, int isResend) {
+	int chance = rand()%2;
+	if (chance == 1)
+		if (sendto(mySocket, packet, sizeof(*packet), 0, (struct sockaddr*)destination, sizeof(*destination)) == -1)
+			fatalerror("Failed to send");
+			
+	if (isResend)
+		printf(ANSI_YELLOW"RESENT: ");
+	else
+		printf(ANSI_GREEN"SENT: ");
+	printf(ANSI_GREEN "%s [id:"ANSI_BLUE"%d"ANSI_GREEN" seq:"ANSI_BLUE"%d"ANSI_GREEN" ws:"ANSI_BLUE"%d"ANSI_GREEN" data:"ANSI_BLUE"%s"ANSI_GREEN"] to"ANSI_BLUE" %s" ANSI_GREEN":" ANSI_BLUE"%d\n"ANSI_RESET,
+				 getFlagString(packet->flags),
+				 packet->id,
+				 packet->seq,
+				 packet->windowsize,
+				 packet->data,
+				 inet_ntoa(destination->sin_addr),
+				 ntohs(destination->sin_port));
+}
+
+int isPacketBroken(struct packet *packet) {
+	uint32_t checksum = packet->crc;
+	packet->crc = 0;
+	unsigned char *data = malloc(sizeof(struct packet) + sizeof(checksum));
+	
+	memcpy(data, packet, sizeof(*packet));
+	memcpy(data + sizeof(*packet), (unsigned char *)&checksum, sizeof(checksum));
+	
+	if (crc32(data, sizeof(*packet) + sizeof(checksum)) == 0) {
+		return 0;
 	}
+	printf(ANSI_RED"WARNING: Broken packet found!"ANSI_RESET);
+	return 1;
 }

@@ -8,12 +8,11 @@
 #include "packet.h"
 #include "misc.h"
 
-
-#define bla 123
-#define blaa 1234
 // SETTINGS
 #define TIMEOUT 1000 // The time before timeout in milliseconds
 #define MAX_RESENDS 10
+#define MAX_SEQUENCE 2
+#define MAX_WINDOWSIZE MAX_SEQUENCE / 2
 
 // STATES
 #define CLOSED 0
@@ -26,13 +25,13 @@
 #define TIME_WAIT 7
 
 int main(int argc, char **argv) {
-	int state = CLOSED, isTimeout, on = 1;
+	int state = CLOSED, receiveStatus, on = 1;
 	struct client client = { 0 };
 	struct packet packet;
 	struct sockaddr_in destination;
 	srand(time(NULL));
 	struct sockaddr_in source;
-	int timer = 0, resendCount = 0;
+	int timer = 0, resendCount = 0, seq = 0, windowsize = MAX_WINDOWSIZE;
 	
 	if (argc < 3)
 		fatalerror("Too few arguments");
@@ -50,24 +49,19 @@ int main(int argc, char **argv) {
 	while (1) {
 		switch (state) {
 			case CLOSED:
-				packet = createPacket(SYN, 0, 0, 0, 0, NULL);
-				if (sendPacket(mySocket, &packet, &destination) == -1)
-					fatalerror("Failed to send syn");
-				printf("SYN sent to %s:%d\n", (char*)inet_ntoa(destination.sin_addr), ntohs(destination.sin_port));
+				createPacket(&packet, SYN, 0, seq, windowsize, NULL);
+				sendPacket(mySocket, &packet, &destination, 0);
 				state = SYN_SENT;
 				break;
 			case SYN_SENT:
-				if (isTimeout) { // TIMEOUT!
+				if (receiveStatus == RECEIVE_TIMEOUT) { // TIMEOUT!
 					resendCount++;
-					packet = createPacket(SYN, 0, 0, 0, 0, NULL);
-					sendPacket(mySocket, &packet, &destination);
-					printf("SYN resent to %s:%d\n", (char*)inet_ntoa(destination.sin_addr), ntohs(destination.sin_port)); 
+					sendPacket(mySocket, &packet, &destination, 1);
 				}
 				else if (packet.flags == SYNACK) {
-					printf("SYNACK received from %s:%d\n", (char*)inet_ntoa(destination.sin_addr), ntohs(destination.sin_port));
-					packet = createPacket(ACK, 0, 0, 0, 0, NULL);
-					sendPacket(mySocket, &packet, &destination);
-					printf("ACK sent to %s:%d\n", (char*)inet_ntoa(destination.sin_addr), ntohs(destination.sin_port));
+					windowsize = packet.windowsize;
+					createPacket(&packet, ACK, 0, seq, windowsize, NULL);
+					sendPacket(mySocket, &packet, &destination, 0);
 					state = ACK_SENT;
 					resendCount = 0;
 				}
@@ -75,18 +69,17 @@ int main(int argc, char **argv) {
 				break;
 			case ACK_SENT: //TODO: LÄGG TILL TIMEOUT EFTER X ANTAL SKICKADE PAKET
 				timer++;
-				if (!isTimeout && packet.flags == SYNACK) {
+				if (receiveStatus == RECEIVE_OK && packet.flags == SYNACK) {
 					resendCount++;
-					packet = createPacket(ACK, 0, 0, 0, 0, NULL);
-					sendPacket(mySocket, &packet, &destination);
-					printf("ACK resent to %s:%d\n", (char*)inet_ntoa(destination.sin_addr), ntohs(destination.sin_port));
+					createPacket(&packet, ACK, 0, 0, 0, NULL);
+					sendPacket(mySocket, &packet, &destination, 0);
 				}
 				else if(resendCount == MAX_RESENDS){
-				resendCount = 0;
-				printf("MAX resends reached going to CLOSED");
-				state = CLOSED;
+					resendCount = 0;
+					printf("MAX resends reached going to CLOSED");
+					state = CLOSED;
 				}
-				else if (isTimeout && timer == MAX_RESENDS) { // TIMEOUT!
+				else if (receiveStatus == RECEIVE_TIMEOUT && timer == MAX_RESENDS) { // TIMEOUT!
 					resendCount = 0;
 					timer = 0;
 					printf("TIMEOUT in ACK_SENT going to DATA_TRANSMISSION\n");
@@ -100,10 +93,9 @@ int main(int argc, char **argv) {
 				//were done send fin and close
 				if(resendCount == MAX_RESENDS){
 					resendCount = 0;
-					packet = createPacket(FIN, 0, 0, 0, 0, NULL);
-					sendPacket(mySocket, &packet, &destination);
-					printf("FIN sent to %s:%d\n", (char*)inet_ntoa(destination.sin_addr), ntohs(destination.sin_port)); 
-				state = FIN_WAIT_1;
+					createPacket(&packet, FIN, 0, 0, 0, NULL);
+					sendPacket(mySocket, &packet, &destination, 0);
+					state = FIN_WAIT_1;
 				}
 				break;
 			case FIN_WAIT_1:
@@ -112,22 +104,20 @@ int main(int argc, char **argv) {
 				printf("Timeout max sent FIN going to CLOSED");
 				state = CLOSED;
 				}
-				else if (isTimeout){
+				else if (receiveStatus == RECEIVE_TIMEOUT){
 					resendCount++;
-					packet = createPacket(FIN, 0, 0, 0, 0, NULL);
-					sendPacket(mySocket, &packet, &destination);
-					printf("FIN resent to %s:%d\n", (char*)inet_ntoa(destination.sin_addr), ntohs(destination.sin_port));
+					createPacket(&packet, FIN, 0, 0, 0, NULL);
+					sendPacket(mySocket, &packet, &destination, 1);
 				}
 				else if (packet.flags == ACK){
 					resendCount = 0;
-					printf("ACK received going to FIN_WAIT_2\n");
+					printf(ANSI_WHITE"FIN_WAIT_1 GOING TO FIN_WAIT_2\n"ANSI_RESET);
 					state = FIN_WAIT_2;
 				}
 				else if (packet.flags == FIN){
 					resendCount = 0;
-					packet = createPacket(ACK, 0, 0, 0, 0, NULL);
-					sendPacket(mySocket, &packet, &destination);
-					printf("ACK sent to %s:%d\n", (char*)inet_ntoa(destination.sin_addr), ntohs(destination.sin_port));
+					createPacket(&packet, ACK, 0, 0, 0, NULL);
+					sendPacket(mySocket, &packet, &destination, 0);
 					state = CLOSING;
 				}
 				else if (resendCount == MAX_RESENDS){
@@ -137,15 +127,13 @@ int main(int argc, char **argv) {
 				break;
 			case FIN_WAIT_2:
 				resendCount++;
-				if (isTimeout && resendCount==MAX_RESENDS) { // TIMEOUT!
+				if (receiveStatus == RECEIVE_TIMEOUT && resendCount==MAX_RESENDS) { // TIMEOUT!
 					printf("Timeout in FIN_WAIT_2 going to CLOSED\n");
 	 				state = CLOSED;
 				}
-				else if(!isTimeout && packet.flags == FIN){
-					packet = createPacket(ACK, 0, 0, 0, 0, NULL);
-					sendPacket(mySocket, &packet, &destination);
-					printf("ACK sent to %s:%d\nGoing to TIME_WAIT\n", (char*)inet_ntoa(destination.sin_addr), ntohs(destination.sin_port));
-				
+				else if(receiveStatus == RECEIVE_OK && packet.flags == FIN){
+					createPacket(&packet, ACK, 0, 0, 0, NULL);
+					sendPacket(mySocket, &packet, &destination, 0);
 					state = TIME_WAIT;
 				}			
 				break;
@@ -154,11 +142,10 @@ int main(int argc, char **argv) {
 					resendCount = 0;
 					state = CLOSED;
 				}
-				else if(isTimeout){
+				else if(receiveStatus == RECEIVE_TIMEOUT) { // TIMEOUT
 					resendCount++;
-					packet = createPacket(ACK, 0, 0, 0, 0, NULL);
-					sendPacket(mySocket, &packet, &destination);
-					printf("ACK resent to %s:%d\n", (char*)inet_ntoa(destination.sin_addr), ntohs(destination.sin_port));
+					createPacket(&packet, ACK, 0, 0, 0, NULL);
+					sendPacket(mySocket, &packet, &destination, 1);
 				}
 				else if(packet.flags == ACK){
 					resendCount = 0;
@@ -172,12 +159,12 @@ int main(int argc, char **argv) {
 					resendCount = 0;
 					state = CLOSED;
 				}
-				break;		
+				break;
 			default:
 				break;
 		}
 		fflush(stdout);
-		isTimeout = waitAndReceivePacket(mySocket, &packet, &source, TIMEOUT);
+		receiveStatus = receivePacketOrTimeout(mySocket, &packet, &source, TIMEOUT);
 	}
 	return 0;
 }

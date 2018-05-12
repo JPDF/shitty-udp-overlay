@@ -8,16 +8,6 @@
 #include "packet.h"
 #include "misc.h"
 
-
-//colors
-#define ANSI_WHITE   "\x1b[1;37m"
-#define ANSI_RED     "\x1b[1;31m"
-#define ANSI_GREEN   "\x1b[1;32m"
-#define ANSI_YELLOW  "\x1b[1;33m"
-#define ANSI_BLUE    "\x1b[1;34m"
-#define ANSI_MAGENTA "\x1b[1;35m"
-#define ANSI_CYAN    "\x1b[1;36m"
-#define ANSI_RESET   "\x1b[0m"
 // SETTINGS
 #define PORT 5555
 #define TIMEOUT 1000 // The time before timeout in milliseconds
@@ -65,7 +55,7 @@ int makeSocket(int port) {
 int main() {
 	int mySocket = makeSocket(PORT);
 	int state = INIT;
-	int isTimeout = 0;
+	int receiveStatus;
 	struct client client = { 0 };
 	struct packet packet;
 	struct sockaddr_in source;
@@ -74,6 +64,10 @@ int main() {
 	int slidingWindowSize = WINDOW_SIZE;
 	int slidingWindowIndexFirst = 0, slidingWindowIndexLast = 0;
 	struct packet *windowBuffer[BUFFER_SIZE];
+	
+	createPacket(&packet, SYN, 0, 100, 200, "bla");
+	if (!isPacketBroken(&packet))
+		printf("Packet is not broken, hurray!\n");
 	
 	srand(time(NULL));
 	
@@ -85,11 +79,9 @@ int main() {
 				state = LISTEN;
 				break;
 			case LISTEN:
-				if (!isTimeout && packet.flags == SYN) {
-					printf(ANSI_GREEN"SYN received from"ANSI_BLUE" %s" ANSI_GREEN":" ANSI_BLUE"%d\n"ANSI_RESET, inet_ntoa(source.sin_addr), ntohs(source.sin_port));
-					packet = createPacket(SYNACK, 0, 0, 0, 0, NULL);
-					sendPacket(mySocket, &packet, &source);
-					printf(ANSI_GREEN"SYNACK sent to "ANSI_BLUE"%s"ANSI_GREEN":"ANSI_BLUE"%d\n"ANSI_RESET, inet_ntoa(source.sin_addr), ntohs(source.sin_port));
+				if (receiveStatus == RECEIVE_OK && packet.flags == SYN) {
+					createPacket(&packet, SYNACK, 0, 0, 0, NULL);
+					sendPacket(mySocket, &packet, &source, 0);
 					printf(ANSI_WHITE"LISTEN GOING TO SYN_RECEIVED\n"ANSI_RESET);
 					state = SYN_RECEIVED;
 				}
@@ -101,16 +93,14 @@ int main() {
 					state = INIT;
 					printf(ANSI_WHITE"CONNECTION TIMEOUT GOING TO CLOSED\n"ANSI_RESET);
 				}
-				else if (isTimeout){//isTimeout -> timeout
-					packet = createPacket(SYNACK, 0, 0, 0, 0, NULL);
-					sendPacket(mySocket, &packet, &source);
-					printf(ANSI_RED"SYNACK resent to "ANSI_BLUE"%s"ANSI_RED":"ANSI_BLUE"%d\n"ANSI_RESET, inet_ntoa(source.sin_addr), ntohs(source.sin_port));
+				else if (receiveStatus == RECEIVE_TIMEOUT){//receiveStatus -> timeout
+					createPacket(&packet, SYNACK, 0, 0, 0, NULL);
+					sendPacket(mySocket, &packet, &source, 1);
 					resendCount++;
 				}
 				else if (packet.flags == ACK){
 					resendCount = 0;
 					state = WAIT;
-					printf(ANSI_GREEN"ACK received from "ANSI_BLUE"%s"ANSI_GREEN":"ANSI_BLUE"%d\n"ANSI_RESET, inet_ntoa(source.sin_addr), ntohs(source.sin_port));
 					printf(ANSI_WHITE"CONNECTION SUCCESS GOING TO DATA TRANSMISSION\n"ANSI_RESET);
 				}
 				break;
@@ -118,7 +108,7 @@ int main() {
 			//sliding window
 			
 			case WAIT:
-				if(isTimeout && packet.flags == FRAME){
+				if(receiveStatus == RECEIVE_OK && packet.flags == FRAME){
 					printf(ANSI_WHITE"WAIT GOING TO FRAME_RECEIVED\n"ANSI_RESET);
 					state = FRAME_RECEIVED;
 					slidingWindowIndexLast = packet.windowsize-1;
@@ -131,10 +121,9 @@ int main() {
 										state = FRAME_IN_WINDOW;
 									}
 									else{
-										packet = createPacket(ACK, 0, 0, 0, 0, NULL);
-										sendPacket(mySocket, &packet, &source);
+										createPacket(&packet, ACK, 0, 0, 0, NULL);
+										sendPacket(mySocket, &packet, &source, 0);
 										printf(ANSI_WHITE"FRAME_RECEIVED GOING TO WAIT - FRAME OUTSIDE WINDOW\n"ANSI_RESET);
-										printf(ANSI_GREEN"OUT D ACK sent to "ANSI_BLUE"%s"ANSI_GREEN":"ANSI_BLUE"%d\n"ANSI_RESET, inet_ntoa(source.sin_addr), ntohs(source.sin_port));
 										state = WAIT;
 									}
 								}
@@ -144,8 +133,8 @@ int main() {
 										state = FRAME_IN_WINDOW;
 									}
 									else{
-										packet = createPacket(ACK, 0, 0, 0, 0, NULL);
-										sendPacket(mySocket, &packet, &source);
+										createPacket(&packet, ACK, 0, 0, 0, NULL);
+										sendPacket(mySocket, &packet, &source, 0);
 										printf(ANSI_WHITE"FRAME_RECEIVED GOING TO WAIT - FRAME OUTSIDE WINDOW\n"ANSI_RESET);
 										printf(ANSI_GREEN"OUT D ACK sent to "ANSI_BLUE"%s"ANSI_GREEN":"ANSI_BLUE"%d\n"ANSI_RESET, inet_ntoa(source.sin_addr), ntohs(source.sin_port));
 										state = WAIT;
@@ -155,25 +144,24 @@ int main() {
 								break;
 							case FRAME_IN_WINDOW:
 								if(packet.seq == slidingWindowIndexFirst){
-									packet = createPacket(ACK, 0, 0, 0, 0, NULL);
-									sendPacket(mySocket, &packet, &source);
+									createPacket(&packet, ACK, 0, 0, 0, NULL);
+									sendPacket(mySocket, &packet, &source, 0);
 									printf(ANSI_WHITE"FRAME_IN_WINDOW GOING TO MOVE_WINDOW - FRAME IS FIRST\n"ANSI_RESET);
-									printf(ANSI_GREEN"D ACK sent to "ANSI_BLUE"%s"ANSI_GREEN":"ANSI_BLUE"%d\n"ANSI_RESET, inet_ntoa(source.sin_addr), ntohs(source.sin_port));
 									state = MOVE_WINDOW;
 								}
 								break;
 							case MOVE_WINDOW:
 								if(slidingWindowIndexFirst != BUFFER_SIZE-1 && slidingWindowIndexLast != BUFFER_SIZE-1){
-								slidingWindowIndexFirst++;
-								slidingWindowIndexLast++;
+									slidingWindowIndexFirst++;
+									slidingWindowIndexLast++;
 								}
 								else if(slidingWindowIndexFirst == BUFFER_SIZE-1){
-								slidingWindowIndexFirst = 0;
-								slidingWindowIndexLast++;
+									slidingWindowIndexFirst = 0;
+									slidingWindowIndexLast++;
 								}
 								else if(slidingWindowIndexLast == BUFFER_SIZE-1){
-								slidingWindowIndexLast = 0;
-								slidingWindowIndexFirst++;
+									slidingWindowIndexLast = 0;
+									slidingWindowIndexFirst++;
 								}
 								printf(ANSI_WHITE"MOVE_WINDOW GOING TO BUFFER\n"ANSI_RESET);
 								state = BUFFER;
@@ -195,11 +183,9 @@ int main() {
 					}
 				}
 				
-				else if (!isTimeout && packet.flags == FIN){
-					printf(ANSI_GREEN"FIN received from "ANSI_BLUE"%s"ANSI_GREEN":"ANSI_BLUE"%d\n"ANSI_RESET, inet_ntoa(source.sin_addr), ntohs(source.sin_port));
-					packet = createPacket(ACK, 0, 0, 0, 0, NULL);
-					sendPacket(mySocket, &packet, &source);
-					printf(ANSI_GREEN"ACK sent to "ANSI_BLUE"%s"ANSI_GREEN":"ANSI_BLUE"%d\n"ANSI_RESET, inet_ntoa(source.sin_addr), ntohs(source.sin_port));
+				else if (receiveStatus == RECEIVE_OK && packet.flags == FIN){
+					createPacket(&packet, ACK, 0, 0, 0, NULL);
+					sendPacket(mySocket, &packet, &source, 0);
 					printf(ANSI_WHITE"DATA RECEIVE STATE GOING TO CLOSE_WAIT\n"ANSI_RESET);
 					state = CLOSE_WAIT;
 					}
@@ -208,9 +194,8 @@ int main() {
 			//TEARDOWN
 		
 			case CLOSE_WAIT:
-				packet = createPacket(FIN, 0, 0, 0, 0, NULL);
-				sendPacket(mySocket, &packet, &source);
-				printf(ANSI_GREEN"FIN sent to "ANSI_BLUE"%s"ANSI_GREEN":"ANSI_BLUE"%d\n"ANSI_RESET, inet_ntoa(source.sin_addr), ntohs(source.sin_port));
+				createPacket(&packet, FIN, 0, 0, 0, NULL);
+				sendPacket(mySocket, &packet, &source, 0);
 				printf(ANSI_WHITE"CLOSE_WAIT GOING TO LAST_ACK\n"ANSI_RESET);
 				state = LAST_ACK;
 				break;
@@ -221,14 +206,12 @@ int main() {
 					state = INIT;
 					printf(ANSI_WHITE "MAX RESENDS REACHED - LAST_ACK GOING TO CLOSED\n"ANSI_RESET);
 				}
-				else if (isTimeout){
-					packet = createPacket(FIN, 0, 0, 0, 0, NULL);
-					sendPacket(mySocket, &packet, &source);
-					printf(ANSI_RESET"FIN resent to "ANSI_BLUE"%s"ANSI_RED":"ANSI_BLUE"%d\n"ANSI_RESET, inet_ntoa(source.sin_addr), ntohs(source.sin_port));
+				else if (receiveStatus == RECEIVE_TIMEOUT){ // TIMEOUT
+					createPacket(&packet, FIN, 0, 0, 0, NULL);
+					sendPacket(mySocket, &packet, &source, 1);
 					resendCount++;
 				}
 				else if (packet.flags == ACK){
-					printf(ANSI_GREEN"ACK received from "ANSI_BLUE"%s"ANSI_GREEN":"ANSI_BLUE"%d\n"ANSI_RESET, inet_ntoa(source.sin_addr), ntohs(source.sin_port));
 					resendCount = 0;
 					state = INIT;
 					printf(ANSI_WHITE"CONNECTION SHUTDOWN SUCCESSFULLY - LAST_ACK GOING TO CLOSED\n"ANSI_RESET);
@@ -240,7 +223,7 @@ int main() {
 				break;
 		}
 		fflush(stdout);
-		isTimeout = waitAndReceivePacket(mySocket, &packet, &source, TIMEOUT);
+		receiveStatus = receivePacketOrTimeout(mySocket, &packet, &source, TIMEOUT);
 	}
 	return 0;
 }
