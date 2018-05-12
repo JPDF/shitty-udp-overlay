@@ -27,6 +27,21 @@ struct packet{
 	char *data;
 };
 
+struct packetTimer {
+	struct packet packet;
+	struct sockaddr_in address;
+	time_t start;
+	time_t stop;
+	struct packetTimer *next;
+};
+typedef struct packetTimer *TimerList;
+
+void addPacketTimer(TimerList *list, struct packet *packet, struct sockaddr_in *address, time_t startTime, time_t timeout);
+
+void removePacketTimerBySeq(TimerList *list, int seq);
+
+void updateTimers(int socket, TimerList *list, time_t time, int *resendCount);
+
 // Creating a packet and returning it...
 void createPacket(struct packet *packet, int flags, int id, int seq, int windowsize, char *data);
 
