@@ -77,10 +77,7 @@ int receivePacket(const int mySocket, struct packet *packet, struct sockaddr_in 
 
 void sendPacket(const int mySocket, const struct packet *packet, const struct sockaddr_in *destination, int isResend) {
 	int chance = rand()%2;
-	if (chance == 1)
-		if (sendto(mySocket, packet, sizeof(*packet), 0, (struct sockaddr*)destination, sizeof(*destination)) == -1)
-			fatalerror("Failed to send");
-			
+	
 	if (isResend)
 		printf(ANSI_YELLOW"RESENT: ");
 	else
@@ -93,6 +90,12 @@ void sendPacket(const int mySocket, const struct packet *packet, const struct so
 				 packet->data,
 				 inet_ntoa(destination->sin_addr),
 				 ntohs(destination->sin_port));
+	
+	if (chance == 1)
+		if (sendto(mySocket, packet, sizeof(*packet), 0, (struct sockaddr*)destination, sizeof(*destination)) == -1)
+			fatalerror("Failed to send");
+	else
+		printf(ANSI_RED"SNEAKY NINJA THREW AWAY PACKAGE"ANSI_RESET);
 }
 
 int isPacketBroken(struct packet *packet) {
@@ -100,12 +103,14 @@ int isPacketBroken(struct packet *packet) {
 	packet->crc = 0;
 	unsigned char *data = malloc(sizeof(struct packet) + sizeof(checksum));
 	
+	// PUT PACKET AND CHECKSUM TOGETHER
 	memcpy(data, packet, sizeof(*packet));
 	memcpy(data + sizeof(*packet), (unsigned char *)&checksum, sizeof(checksum));
 	
 	if (crc32(data, sizeof(*packet) + sizeof(checksum)) == 0) {
 		return 0;
 	}
-	printf(ANSI_RED"WARNING: Broken packet found!"ANSI_RESET);
+	printf(ANSI_RED"WARNING: Broken packet found!\n"ANSI_RESET);
+	free(data);
 	return 1;
 }

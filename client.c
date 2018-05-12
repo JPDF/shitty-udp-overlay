@@ -91,25 +91,26 @@ int main(int argc, char **argv) {
 				printf("vi skickar data [%d]\n", resendCount+1);
 				resendCount++;
 				//were done send fin and close
-				if(resendCount == MAX_RESENDS){
+				if(resendCount >= MAX_RESENDS){
 					resendCount = 0;
 					createPacket(&packet, FIN, 0, 0, 0, NULL);
 					sendPacket(mySocket, &packet, &destination, 0);
+					printf(ANSI_WHITE"DATA_TRANSMISSION GOING TO FIN_WAIT_1\n"ANSI_RESET);
 					state = FIN_WAIT_1;
 				}
 				break;
 			case FIN_WAIT_1:
-				if (resendCount == MAX_RESENDS){
-				resendCount = 0;
-				printf("Timeout max sent FIN going to CLOSED");
-				state = CLOSED;
+				if (resendCount >= MAX_RESENDS){
+					resendCount = 0;
+					printf(ANSI_WHITE"FIN_WAIT_1 GOING TO CLOSED - MAX FIN SENT\n"ANSI_RESET);
+					state = CLOSED;
 				}
 				else if (receiveStatus == RECEIVE_TIMEOUT){
 					resendCount++;
 					createPacket(&packet, FIN, 0, 0, 0, NULL);
 					sendPacket(mySocket, &packet, &destination, 1);
 				}
-				else if (packet.flags == ACK){
+				else if (packet.flags == ACK)	{
 					resendCount = 0;
 					printf(ANSI_WHITE"FIN_WAIT_1 GOING TO FIN_WAIT_2\n"ANSI_RESET);
 					state = FIN_WAIT_2;
@@ -118,9 +119,10 @@ int main(int argc, char **argv) {
 					resendCount = 0;
 					createPacket(&packet, ACK, 0, 0, 0, NULL);
 					sendPacket(mySocket, &packet, &destination, 0);
+					printf(ANSI_WHITE"FIN_WAIT_1 GOING TO CLOSING\n"ANSI_RESET);
 					state = CLOSING;
 				}
-				else if (resendCount == MAX_RESENDS){
+				else if (resendCount == MAX_RESENDS) {
 					resendCount = 0;
 					state = CLOSED;
 				}
@@ -128,18 +130,20 @@ int main(int argc, char **argv) {
 			case FIN_WAIT_2:
 				resendCount++;
 				if (receiveStatus == RECEIVE_TIMEOUT && resendCount==MAX_RESENDS) { // TIMEOUT!
-					printf("Timeout in FIN_WAIT_2 going to CLOSED\n");
+					printf(ANSI_WHITE"FIN_WAIT_2 GOING TO CLOSED\n"ANSI_RESET);
 	 				state = CLOSED;
 				}
 				else if(receiveStatus == RECEIVE_OK && packet.flags == FIN){
 					createPacket(&packet, ACK, 0, 0, 0, NULL);
 					sendPacket(mySocket, &packet, &destination, 0);
+					printf(ANSI_WHITE"FIN_WAIT_2 GOING TO TIME_WAIT\n"ANSI_RESET);
 					state = TIME_WAIT;
 				}			
 				break;
 			case CLOSING:
-				if(resendCount==MAX_RESENDS){
+				if(resendCount >= MAX_RESENDS){
 					resendCount = 0;
+					printf(ANSI_WHITE"CLOSING GOING TO CLOSED\n"ANSI_RESET);
 					state = CLOSED;
 				}
 				else if(receiveStatus == RECEIVE_TIMEOUT) { // TIMEOUT
@@ -149,13 +153,14 @@ int main(int argc, char **argv) {
 				}
 				else if(packet.flags == ACK){
 					resendCount = 0;
+					printf(ANSI_WHITE"CLOSING GOING TO TIME_WAIT\n"ANSI_RESET);
 					state = TIME_WAIT;
 				}
 				break;
 			case TIME_WAIT:
 				resendCount++;
 				if(resendCount==MAX_RESENDS){
-					printf("TIME_WAIT done going to CLOSED\n");
+					printf("TIME_WAIT GOING TO CLOSED\n");
 					resendCount = 0;
 					state = CLOSED;
 				}
