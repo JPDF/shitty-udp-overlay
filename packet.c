@@ -13,6 +13,7 @@ char *getFlagString(int flag) {
 		case ACK: return "ACK";
 		case FIN: return "FIN";
 		case FRAME: return "FRAME";
+		case NACK: return "NACK";
 		default: return "NOT DEFINED";
 	}
 }
@@ -36,7 +37,9 @@ void createPacket(struct packet *packet, int flags, int id, int seq, int windows
 	packet->seq = seq;
 	packet->windowsize = windowsize;
 	packet->crc = 0;
-	packet->data = data;
+	packet->data[0] = '\0';
+	if (data != NULL)
+		strcpy(packet->data, data);
 	packet->crc = crc32(packet, sizeof(*packet));
 }
 
@@ -76,7 +79,7 @@ int receivePacket(const int mySocket, struct packet *packet, struct sockaddr_in 
 }
 
 void sendPacket(const int mySocket, const struct packet *packet, const struct sockaddr_in *destination, int isResend) {
-	int chance = rand()%2;
+	int chance = 1;//rand()%2;
 	
 	if (isResend)
 		printf(ANSI_YELLOW"RESENT: ");

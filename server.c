@@ -125,9 +125,9 @@ int main() {
 						switch (state) {
 							case FRAME_RECEIVED:
 								if (receiveStatus == RECEIVE_BROKEN){
-										createPacket(&packet, NAK, 0, packet.seq, windowsize, NULL);
+										createPacket(&packet, NACK, 0, packet.seq, windowsize, NULL);
 										sendPacket(mySocket, &packet, &otherAddress, 0);
-										printf(ANSI_WHITE"FRAME_RECEIVED GOING TO WAIT - FRAME BROKEN SENDING NAK\n"ANSI_RESET);
+										printf(ANSI_WHITE"FRAME_RECEIVED GOING TO WAIT - FRAME BROKEN SENDING NACK\n"ANSI_RESET);
 										state = WAIT;
 								}
 								else if (slidingWindowIndexFirst <= slidingWindowIndexLast){
@@ -155,7 +155,7 @@ int main() {
 										state = WAIT;
 									}
 								}
-								//TODO: ELSE IF FOR BROKEN FRAME THAT SENDS A NAK
+								//TODO: ELSE IF FOR BROKEN FRAME THAT SENDS A NACK
 								break;
 							case FRAME_IN_WINDOW:
 								if(packet.seq == slidingWindowIndexFirst){
@@ -175,7 +175,12 @@ int main() {
 									sendPacket(mySocket, &packet, &otherAddress, 0);
 								break;
 							case MOVE_WINDOW:
-								finalBuffer = (char*)realloc(finalBuffer, strlen(finalBuffer)+strlen(packet.data)+1);
+								if (finalBuffer == NULL)
+									finalBuffer = malloc(strlen(packet.data) + 1);
+								else
+									finalBuffer = (char*)realloc(finalBuffer, strlen(finalBuffer)+strlen(packet.data)+1);
+								if (finalBuffer == NULL)
+									fatalerror("Failed to malloc/realloc finalBuffer");
 								strcat(finalBuffer, packet.data);
 								slidingWindowIndexFirst = (slidingWindowIndexFirst+1) % MAX_SEQUENCE;
 								slidingWindowIndexLast = (slidingWindowIndexLast+1) % MAX_SEQUENCE;
@@ -189,7 +194,6 @@ int main() {
 										state = MOVE_WINDOW;
 										packet = windowBuffer[i];
 										windowBuffer[i].seq = -1;
-										windowBuffer[i].data = NULL;
 										break;
 									}
 								}	

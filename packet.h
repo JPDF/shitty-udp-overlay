@@ -24,8 +24,8 @@ struct packet{
 	int id;
 	int seq;
 	int windowsize;
-	uint32_t crc;
-	char *data;
+	int crc;
+	char data[10];
 };
 
 struct packetTimer {
