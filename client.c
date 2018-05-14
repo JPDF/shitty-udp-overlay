@@ -25,6 +25,7 @@
 #define FIN_WAIT_2 5
 #define CLOSING 6
 #define TIME_WAIT 7
+#define ACK_RECEIVED 8
 
 int main(int argc, char **argv) {
 	int state = CLOSED, receiveStatus, on = 1;
@@ -102,6 +103,14 @@ int main(int argc, char **argv) {
 					addPacketTimer(&timerList, &packet, &destination, deltaTime, TIMEOUT);
 					printf(ANSI_WHITE"DATA_TRANSMISSION GOING TO FIN_WAIT_1\n"ANSI_RESET);
 					state = FIN_WAIT_1;
+				}
+				while(1){//TODO: lägg till condition
+					switch (switching){
+						case ACK_RECEIVED:
+							if (packet.flags == ACK){
+								switching = 
+							}
+						}
 				}
 				break;
 			case FIN_WAIT_1:

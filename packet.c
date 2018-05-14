@@ -22,7 +22,7 @@ uint32_t crc32(const void *data, int size) {
 	uint32_t remainder = 0;
 	const uint8_t *bytes = (const uint8_t *)data;
 	for (i = 0; i < size; i++) { 
-		remainder ^= bytes[i];
+		remainder ^= bytes[i]; // Shift in next byte into remainder
 		for (j = 0; j < 8; j++) {
 			remainder = (remainder & 1) != 0 ? (remainder >> 1) ^ CRC_POLYNOM : remainder >> 1;
 		}
