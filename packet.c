@@ -36,7 +36,9 @@ void createPacket(struct packet *packet, int flags, int id, int seq, int windows
 	packet->seq = seq;
 	packet->windowsize = windowsize;
 	packet->crc = 0;
-	packet->data = data;
+	packet->data[0] = '\0';
+	if (data != NULL)
+		strcpy(packet->data, data);
 	packet->crc = crc32(packet, sizeof(*packet));
 }
 
@@ -70,13 +72,14 @@ int receivePacket(const int mySocket, struct packet *packet, struct sockaddr_in 
 				 packet->data,
 				 inet_ntoa(source->sin_addr),
 				 ntohs(source->sin_port));
+				 fflush(stdout);
 	if (isPacketBroken(packet))
 		return RECEIVE_BROKEN;
 	return RECEIVE_OK;
 }
 
 void sendPacket(const int mySocket, const struct packet *packet, const struct sockaddr_in *destination, int isResend) {
-	int chance = rand()%2;
+	int chance = 1; //rand()%2;
 	
 	if (isResend)
 		printf(ANSI_YELLOW"RESENT: ");

@@ -7,6 +7,7 @@
 #include <string.h>
 #include "packet.h"
 #include "misc.h"
+#include <time.h>
 
 // SETTINGS
 #define PORT 5555
@@ -67,14 +68,14 @@ int main() {
 	TimerList timerList = NULL;
 	struct timespec start, stop;
 	time_t deltaTime = 0, tTimeout = 0;
-	char *finalBuffer;
+	char *finalBuffer = NULL;
 	
 	createPacket(&packet, SYN, 0, 100, 200, "bla");
 	if (!isPacketBroken(&packet))
 		printf("Packet is not broken, hurray!\n");
 	
 	srand(time(NULL));
-	
+	clock_gettime(CLOCK_MONOTONIC, &start);
 	// Event handling loop
 	while (1) {
 		switch (state) {
@@ -125,9 +126,9 @@ int main() {
 						switch (state) {
 							case FRAME_RECEIVED:
 								if (receiveStatus == RECEIVE_BROKEN){
-										createPacket(&packet, NAK, 0, packet.seq, windowsize, NULL);
+										createPacket(&packet, NACK, 0, packet.seq, windowsize, NULL);
 										sendPacket(mySocket, &packet, &otherAddress, 0);
-										printf(ANSI_WHITE"FRAME_RECEIVED GOING TO WAIT - FRAME BROKEN SENDING NAK\n"ANSI_RESET);
+										printf(ANSI_WHITE"FRAME_RECEIVED GOING TO WAIT - FRAME BROKEN SENDING NACK\n"ANSI_RESET);
 										state = WAIT;
 								}
 								else if (slidingWindowIndexFirst <= slidingWindowIndexLast){
@@ -155,7 +156,7 @@ int main() {
 										state = WAIT;
 									}
 								}
-								//TODO: ELSE IF FOR BROKEN FRAME THAT SENDS A NAK
+								//TODO: ELSE IF FOR BROKEN FRAME THAT SENDS A NACK
 								break;
 							case FRAME_IN_WINDOW:
 								if(packet.seq == slidingWindowIndexFirst){
@@ -175,7 +176,14 @@ int main() {
 									sendPacket(mySocket, &packet, &otherAddress, 0);
 								break;
 							case MOVE_WINDOW:
-								finalBuffer = (char*)realloc(finalBuffer, strlen(finalBuffer)+strlen(packet.data)+1);
+								if(finalBuffer == NULL){
+									finalBuffer = malloc(strlen(packet.data)+1);
+									strcpy(finalBuffer, "Med:");
+								}
+								else 
+									finalBuffer = (char*)realloc(finalBuffer, strlen(finalBuffer)+strlen(packet.data)+1);
+								if (finalBuffer == NULL)
+									fatalerror("failed to malloc/realloc finalBuffer\n");
 								strcat(finalBuffer, packet.data);
 								slidingWindowIndexFirst = (slidingWindowIndexFirst+1) % MAX_SEQUENCE;
 								slidingWindowIndexLast = (slidingWindowIndexLast+1) % MAX_SEQUENCE;
@@ -189,7 +197,6 @@ int main() {
 										state = MOVE_WINDOW;
 										packet = windowBuffer[i];
 										windowBuffer[i].seq = -1;
-										windowBuffer[i].data = NULL;
 										break;
 									}
 								}	
@@ -204,18 +211,18 @@ int main() {
 				}
 				
 				else if (receiveStatus == RECEIVE_OK && packet.flags == FIN){
-					createPacket(&packet, ACK, 0, 0, windowsize, NULL);
+					createPacket(&packet, ACK, 0, packet.seq, windowsize, NULL);
 					sendPacket(mySocket, &packet, &otherAddress, 0);
 					printf(ANSI_WHITE"DATA RECEIVE STATE GOING TO CLOSE_WAIT\n"ANSI_RESET);
 					state = CLOSE_WAIT;
-					printf("%s",finalBuffer);
+					printf(" - - - - %s - - - -\n", finalBuffer);
 					}
 				break;
 			
 			//TEARDOWN
 		
 			case CLOSE_WAIT:
-				createPacket(&packet, FIN, 0, 0, windowsize, NULL);
+				createPacket(&packet, FIN, 0, packet.seq, windowsize, NULL);
 				sendPacket(mySocket, &packet, &otherAddress, 0);
 				addPacketTimer(&timerList, &packet, &otherAddress, deltaTime, TIMEOUT);
 				printf(ANSI_WHITE"CLOSE_WAIT GOING TO LAST_ACK\n"ANSI_RESET);
@@ -243,6 +250,11 @@ int main() {
 		}
 		fflush(stdout);
 		receiveStatus = receivePacketOrTimeout(mySocket, &packet, &otherAddress, TIMEOUT);
+		
+		clock_gettime(CLOCK_MONOTONIC, &stop);
+		deltaTime = (stop.tv_sec * 1000 + stop.tv_nsec / 1000000) - (start.tv_sec * 1000 + start.tv_nsec / 1000000);
+
+		updateTimers(mySocket, &timerList, deltaTime, &resendCount);
 	}
 	return 0;
 }
