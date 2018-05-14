@@ -11,6 +11,7 @@
 #define ACK 3
 #define FIN 4
 #define FRAME 5
+#define NACK 6
 
 #define RECEIVE_OK 1
 #define RECEIVE_TIMEOUT 0
