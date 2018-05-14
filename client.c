@@ -10,8 +10,8 @@
 #include "misc.h"
 
 // SETTINGS
-#define HEARTBEAT_TIMEOUT 1
-#define TIMEOUT 10 // The time before timeout on each packet in milliseconds
+#define HEARTBEAT_TIMEOUT 100
+#define TIMEOUT 100 // The time before timeout on each packet in milliseconds
 #define MAX_RESENDS 10
 #define MAX_SEQUENCE 2
 #define MAX_WINDOWSIZE MAX_SEQUENCE / 2
@@ -71,7 +71,11 @@ int main(int argc, char **argv) {
 					tTimeout = deltaTime;
 					resendCount = 0;
 				}
-			
+				if (resendCount == MAX_RESENDS){
+					resendCount = 0;
+					state = CLOSED;
+					printf(ANSI_WHITE"SYN_SENT GOING TO CLOSED - MAX RESENDS REACHED (SYN)"ANSI_RESET "\n");
+				}
 				break;
 			case ACK_SENT: //TODO: LÄGG TILL TIMEOUT EFTER X ANTAL SKICKADE PAKET
 				if (receiveStatus == RECEIVE_OK && packet.flags == SYNACK) {

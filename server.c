@@ -10,7 +10,7 @@
 
 // SETTINGS
 #define PORT 5555
-#define TIMEOUT 1000 // The time before timeout in milliseconds
+#define TIMEOUT 100 // The time before timeout in milliseconds
 #define MAX_RESENDS 10
 
 // STATES
