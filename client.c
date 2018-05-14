@@ -10,7 +10,8 @@
 #include "misc.h"
 
 // SETTINGS
-#define TIMEOUT 10 // The time before timeout in milliseconds
+#define HEARTBEAT_TIMEOUT 1
+#define TIMEOUT 10 // The time before timeout on each packet in milliseconds
 #define MAX_RESENDS 10
 #define MAX_SEQUENCE 2
 #define MAX_WINDOWSIZE MAX_SEQUENCE / 2
@@ -122,7 +123,7 @@ int main(int argc, char **argv) {
 					resendCount = 0;
 					createPacket(&packet, ACK, 0, 0, 0, NULL);
 					sendPacket(mySocket, &packet, &destination, 0);
-					addPacketTimer(&timerList, &packet, deltaTime, TIMEOUT);
+					addPacketTimer(&timerList, &packet, &destination, deltaTime, TIMEOUT);
 					printf(ANSI_WHITE"FIN_WAIT_1 GOING TO CLOSING\n"ANSI_RESET);
 					state = CLOSING;
 				}
@@ -166,7 +167,7 @@ int main(int argc, char **argv) {
 				break;
 		}
 		fflush(stdout);
-		receiveStatus = receivePacketOrTimeout(mySocket, &packet, &source, TIMEOUT);
+		receiveStatus = receivePacketOrTimeout(mySocket, &packet, &source, HEARTBEAT_TIMEOUT);
 		
 		clock_gettime(CLOCK_MONOTONIC, &stop);
 		deltaTime = (stop.tv_sec * 1000 + stop.tv_nsec / 1000000) - (start.tv_sec * 1000 + start.tv_nsec / 1000000);
