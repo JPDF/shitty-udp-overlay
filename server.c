@@ -69,6 +69,7 @@ int main() {
 	struct timespec start, stop;
 	time_t deltaTime = 0, tTimeout = 0;
 	char *finalBuffer = NULL;
+	char dataBuffer[10];
 	
 	createPacket(&packet, SYN, 0, 100, 200, "bla");
 	if (!isPacketBroken(&packet))
@@ -114,11 +115,12 @@ int main() {
 					printf(ANSI_WHITE"CONNECTION SUCCESS GOING TO DATA TRANSMISSION\n"ANSI_RESET);
 				}
 				slidingWindowIndexLast=windowsize-1;
+				slidingWindowIndexFirst=0;
 				break;
 			
 			//sliding window
 			
-			case WAIT:
+			case WAIT: //TODO: EXIT AFTER X TIME OF INACTIVITY ( NO FRAMES FROM CLIENT)
 				if(receiveStatus == RECEIVE_OK && packet.flags == FRAME){
 					printf(ANSI_WHITE"WAIT GOING TO FRAME_RECEIVED\n"ANSI_RESET);
 					state = FRAME_RECEIVED;
@@ -172,19 +174,20 @@ int main() {
 										}
 									}
 								}
-									createPacket(&packet, ACK, 0, packet.seq, windowsize, NULL);
-									sendPacket(mySocket, &packet, &otherAddress, 0);
+								strcpy(dataBuffer, packet.data);
+								createPacket(&packet, ACK, 0, packet.seq, windowsize, NULL);
+								sendPacket(mySocket, &packet, &otherAddress, 0);
 								break;
 							case MOVE_WINDOW:
 								if(finalBuffer == NULL){
-									finalBuffer = malloc(strlen(packet.data)+1);
+									finalBuffer = malloc(strlen(dataBuffer)+1);
 									strcpy(finalBuffer, "Med:");
 								}
 								else 
-									finalBuffer = (char*)realloc(finalBuffer, strlen(finalBuffer)+strlen(packet.data)+1);
+									finalBuffer = (char*)realloc(finalBuffer, strlen(finalBuffer) + strlen(dataBuffer) + 1);
 								if (finalBuffer == NULL)
 									fatalerror("failed to malloc/realloc finalBuffer\n");
-								strcat(finalBuffer, packet.data);
+								strcat(finalBuffer, dataBuffer);
 								slidingWindowIndexFirst = (slidingWindowIndexFirst+1) % MAX_SEQUENCE;
 								slidingWindowIndexLast = (slidingWindowIndexLast+1) % MAX_SEQUENCE;
 								printf(ANSI_WHITE"MOVE_WINDOW GOING TO BUFFER\n"ANSI_RESET);
@@ -197,6 +200,7 @@ int main() {
 										state = MOVE_WINDOW;
 										packet = windowBuffer[i];
 										windowBuffer[i].seq = -1;
+										strcpy(dataBuffer, packet.data);
 										break;
 									}
 								}	
@@ -216,6 +220,9 @@ int main() {
 					printf(ANSI_WHITE"DATA RECEIVE STATE GOING TO CLOSE_WAIT\n"ANSI_RESET);
 					state = CLOSE_WAIT;
 					printf(" - - - - %s - - - -\n", finalBuffer);
+					free(finalBuffer);
+					resendCount = 0;
+					finalBuffer = NULL;
 					}
 				break;
 			
