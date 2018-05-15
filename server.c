@@ -13,6 +13,7 @@
 #define PORT 5555
 #define TIMEOUT 1000 // The time before timeout in milliseconds
 #define MAX_RESENDS 10
+#define NO_MESSAGE_TIMEOUT 1000 //time before the client is considered to have disconnected out of order
 
 // STATES
 #define INIT 0
@@ -58,7 +59,6 @@ int main() {
 	int state = INIT;
 	int receiveStatus;
 	int i = 0;
-	struct client client = { 0 };
 	struct packet packet;
 	struct sockaddr_in otherAddress;
 	int resendCount = 0;
@@ -120,8 +120,13 @@ int main() {
 			
 			//sliding window
 			
-			case WAIT: //TODO: EXIT AFTER X TIME OF INACTIVITY ( NO FRAMES FROM CLIENT)
-				if(receiveStatus == RECEIVE_OK && packet.flags == FRAME){
+			case WAIT:
+				if (deltaTime - tTimeout > NO_MESSAGE_TIMEOUT) { // TIMEOUT!
+					resendCount = 0;
+					printf("NO MESSAGE RECEIVED. WAIT GOING TO INIT\n");
+	 				state = INIT;
+				}
+				else if(receiveStatus == RECEIVE_OK && packet.flags == FRAME){
 					printf(ANSI_WHITE"WAIT GOING TO FRAME_RECEIVED\n"ANSI_RESET);
 					state = FRAME_RECEIVED;
 					while(state != WAIT){
@@ -158,7 +163,6 @@ int main() {
 										state = WAIT;
 									}
 								}
-								//TODO: ELSE IF FOR BROKEN FRAME THAT SENDS A NACK
 								break;
 							case FRAME_IN_WINDOW:
 								if(packet.seq == slidingWindowIndexFirst){
@@ -213,7 +217,6 @@ int main() {
 						}
 					}
 				}
-				
 				else if (receiveStatus == RECEIVE_OK && packet.flags == FIN){
 					createPacket(&packet, ACK, 0, packet.seq, windowsize, NULL);
 					sendPacket(mySocket, &packet, &otherAddress, 0);
