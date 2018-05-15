@@ -13,7 +13,7 @@
 #define PORT 5555
 #define TIMEOUT 1000 // The time before timeout in milliseconds
 #define MAX_RESENDS 10
-#define NO_MESSAGE_TIMEOUT 1000 //time before the client is considered to have disconnected out of order
+#define NO_MESSAGE_TIMEOUT 10000 //time before the client is considered to have disconnected out of order
 
 // STATES
 #define INIT 0
@@ -88,9 +88,11 @@ int main() {
 					if(windowsize > packet.windowsize){
 						windowsize = packet.windowsize;
 					}
-					createPacket(&packet, SYNACK, 0, 0, windowsize, NULL);
+					
+					createAndSendPacketWithResendTimer(mySocket,SYNACK, 0, 0, windowsize, NULL, &otherAddress, &timerList, deltaTime);
+					/*createPacket(&packet, SYNACK, 0, 0, windowsize, NULL);
 					sendPacket(mySocket, &packet, &otherAddress, 0);
-					addPacketTimer(&timerList, &packet, &otherAddress, deltaTime);
+					addPacketTimer(&timerList, &packet, &otherAddress, deltaTime);*/
 					printf(ANSI_WHITE"LISTEN GOING TO SYN_RECEIVED\n"ANSI_RESET);
 					state = SYN_RECEIVED;
 				}
@@ -109,6 +111,7 @@ int main() {
 					for(i = 0; i < windowsize-1;i++){
 						windowBuffer[i].seq = -1;
 					}
+					tTimeout = deltaTime;
 					resendCount = 0;
 					state = WAIT;
 					printf(ANSI_WHITE"CONNECTION SUCCESS GOING TO DATA TRANSMISSION\n"ANSI_RESET);
@@ -132,10 +135,11 @@ int main() {
 						switch (state) {
 							case FRAME_RECEIVED:
 								if (receiveStatus == RECEIVE_BROKEN){
-										createPacket(&packet, NACK, 0, packet.seq, windowsize, NULL);
-										sendPacket(mySocket, &packet, &otherAddress, 0);
-										printf(ANSI_WHITE"FRAME_RECEIVED GOING TO WAIT - FRAME BROKEN SENDING NACK\n"ANSI_RESET);
-										state = WAIT;
+									createAndSendPacket(mySocket, NACK, 0, packet.seq, windowsize, NULL, &otherAddress);
+								/*		createPacket(&packet, NACK, 0, packet.seq, windowsize, NULL);
+										sendPacket(mySocket, &packet, &otherAddress, 0);*/
+									printf(ANSI_WHITE"FRAME_RECEIVED GOING TO WAIT - FRAME BROKEN SENDING NACK\n"ANSI_RESET);
+									state = WAIT;
 								}
 								else if (slidingWindowIndexFirst <= slidingWindowIndexLast){
 									if(packet.seq >= slidingWindowIndexFirst && packet.seq <= slidingWindowIndexLast){
@@ -143,8 +147,9 @@ int main() {
 										state = FRAME_IN_WINDOW;
 									}
 									else{
-										createPacket(&packet, ACK, 0, packet.seq, windowsize, NULL);
-										sendPacket(mySocket, &packet, &otherAddress, 0);
+										createAndSendPacket(mySocket, ACK, 0, packet.seq, windowsize, NULL, &otherAddress);
+										/*createPacket(&packet, ACK, 0, packet.seq, windowsize, NULL);
+										sendPacket(mySocket, &packet, &otherAddress, 0);*/
 										printf(ANSI_WHITE"FRAME_RECEIVED GOING TO WAIT - FRAME OUTSIDE WINDOW\n"ANSI_RESET);
 										state = WAIT;
 									}
@@ -155,8 +160,9 @@ int main() {
 										state = FRAME_IN_WINDOW;
 									}
 									else{
-										createPacket(&packet, ACK, 0, packet.seq, windowsize, NULL);
-										sendPacket(mySocket, &packet, &otherAddress, 0);
+										createAndSendPacket(mySocket, ACK, 0, packet.seq, windowsize, NULL, &otherAddress);
+										/*createPacket(&packet, ACK, 0, packet.seq, windowsize, NULL);
+										sendPacket(mySocket, &packet, &otherAddress, 0);*/
 										printf(ANSI_WHITE"FRAME_RECEIVED GOING TO WAIT - FRAME OUTSIDE WINDOW\n"ANSI_RESET);
 										printf(ANSI_GREEN"OUT D ACK sent to "ANSI_BLUE"%s"ANSI_GREEN":"ANSI_BLUE"%d\n"ANSI_RESET, inet_ntoa(otherAddress.sin_addr), ntohs(otherAddress.sin_port));
 										state = WAIT;
@@ -177,8 +183,9 @@ int main() {
 										}
 									}
 								}
-								createPacket(&packet, ACK, 0, packet.seq, windowsize, NULL);
-								sendPacket(mySocket, &packet, &otherAddress, 0);
+								createAndSendPacket(mySocket, ACK, 0, packet.seq, windowsize, NULL, &otherAddress);
+								/*createPacket(&packet, ACK, 0, packet.seq, windowsize, NULL);
+								sendPacket(mySocket, &packet, &otherAddress, 0);*/
 								break;
 							case MOVE_WINDOW:
 								if (finalBuffer == NULL)
@@ -221,8 +228,10 @@ int main() {
 					}
 				}
 				else if (receiveStatus == RECEIVE_OK && packet.flags == FIN){
+					createAndSendPacket(mySocket, ACK, 0, packet.seq, windowsize, NULL, &otherAddress);
+					/*
 					createPacket(&packet, ACK, 0, packet.seq, windowsize, NULL);
-					sendPacket(mySocket, &packet, &otherAddress, 0);
+					sendPacket(mySocket, &packet, &otherAddress, 0);*/
 					printf(ANSI_WHITE"DATA RECEIVE STATE GOING TO CLOSE_WAIT\n"ANSI_RESET);
 					state = CLOSE_WAIT;
 					printf(" - - - - %s - - - -\n", finalBuffer);
@@ -235,9 +244,10 @@ int main() {
 			//TEARDOWN
 		
 			case CLOSE_WAIT:
-				createPacket(&packet, FIN, 0, packet.seq, windowsize, NULL);
+				createAndSendPacketWithResendTimer(mySocket, FIN, 0, 0, windowsize, NULL, &otherAddress, &timerList, deltaTime);
+				/*createPacket(&packet, FIN, 0, packet.seq, windowsize, NULL);
 				sendPacket(mySocket, &packet, &otherAddress, 0);
-				addPacketTimer(&timerList, &packet, &otherAddress, deltaTime);
+				addPacketTimer(&timerList, &packet, &otherAddress, deltaTime);*/
 				printf(ANSI_WHITE"CLOSE_WAIT GOING TO LAST_ACK\n"ANSI_RESET);
 				state = LAST_ACK;
 				break;
