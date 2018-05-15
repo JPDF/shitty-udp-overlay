@@ -24,6 +24,11 @@
 #define CLOSED 0
 #define SYN_SENT 1
 #define ACK_SENT 2
+// MENU STATES
+#define MENU 100
+#define LOST_FRAMES 101
+#define WRONG_ORDER 102
+#define BROKEN_CRC 103
 // SLIDING WINDOW STATES
 #define WAIT 10
 #define ACK_RECEIVED 11
@@ -49,6 +54,7 @@ int main(int argc, char **argv) {
 	struct timespec start, stop;
 	time_t deltaTime = 0, tTimeout = 0;
 	int *windowBuffer;
+	int menuChoise;
 	
 	char *data[MAX_DATA] = {
 		"j",
@@ -75,6 +81,25 @@ int main(int argc, char **argv) {
 	
 		switch (state) {
 			case CLOSED:
+			state = MENU;
+				while (state != CLOSED)
+					switch (state){
+						case (MENU):
+							printf("How do you want to mess up?\n1. Lost frames\n2. Frames sent in the wrong order\n3. Broken crc\n");
+							scanf("%d", &menuChoise);
+							switch (menuChoise){
+								case (1):
+									state = CLOSED;
+									break;
+								case (2):
+								
+								case (3):
+								default:
+									printf("User selected fucket up");
+									break;
+							}
+							break;
+						}
 				createAndSendPacketWithResendTimer(mySocket, SYN, 0, seq, windowsize, NULL, &otherAddress, &timerList, deltaTime);
 				state = SYN_SENT;
 				break;
@@ -143,7 +168,10 @@ int main(int argc, char **argv) {
 					state = FIN_WAIT_1;
 				}
 				
-				if(receiveStatus == RECEIVE_OK && packet.flags == ACK) {
+				if (packet.flags == NACK) {
+					resendPacketBySeq(mySocket, &timerList, deltaTime, packet.seq);
+				}
+				else if(receiveStatus == RECEIVE_OK && packet.flags == ACK) {
 					printf(ANSI_WHITE"WAIT GOING TO FRAME_RECEIVED\n"ANSI_RESET);
 					state = ACK_RECEIVED;
 				

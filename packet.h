@@ -39,12 +39,6 @@ struct packetTimer {
 };
 typedef struct packetTimer *TimerList;
 
-void addPacketTimer(TimerList *list, const struct packet *packet, const struct sockaddr_in *address, time_t startTime);
-
-void removePacketTimerBySeq(TimerList *list, int seq);
-
-void updateTimers(int socket, TimerList *list, time_t time, int *resendCount);
-
 // Creating a packet and returning it...
 void createPacket(struct packet *packet, int flags, int id, int seq, int windowsize, char *data);
 
@@ -74,5 +68,17 @@ void createAndSendPacketWithResendTimer(int mySocket, int flags, int id, int seq
  *	packet: The packet to check if broken
  * Returns: 1 if broken else 0 */
 int isPacketBroken(struct packet *packet);
+
+
+void addPacketTimer(TimerList *list, const struct packet *packet, const struct sockaddr_in *address, time_t startTime);
+
+void removeFirstPacketTimer(TimerList *list);
+void removePacketTimerBySeq(TimerList *list, int seq);
+
+void resendPacketBySeq(int socket, TimerList *list, time_t time, int seq);
+
+void updateTimers(int socket, TimerList *list, time_t time, int *resendCount);
+
+
 
 #endif

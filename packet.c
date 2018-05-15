@@ -154,18 +154,22 @@ void addPacketTimer(TimerList *list, const struct packet *packet, const struct s
 		addPacketTimer(&(*list)->next, packet, address, startTime);
 }
 
-void removePacketTimerBySeq(TimerList *list, int seq) {
+void removeFirstPacketTimer(TimerList *list) {
 	struct packetTimer *temp;
 	if (*list == NULL)
 		return;
+	temp = *list;
+	*list = temp->next;
+	printf(ANSI_GREEN "DELETED FROM TIMER LIST %d\n"ANSI_RESET, temp->packet.seq);
+	free(temp);
+	temp = NULL;
+}
+
+void removePacketTimerBySeq(TimerList *list, int seq) {
+	if (*list == NULL)
+		return;
 	if ((*list)->packet.seq == seq) {
-		temp = *list;
-		
-		printf(ANSI_GREEN "DELETED FROM TIMER LIST %d\n"ANSI_RESET, temp->packet.seq);
-		
-		(*list) = temp->next;
-		free(temp);
-		temp = NULL;
+		removeFirstPacketTimer(list);
 	}
 	else
 		removePacketTimerBySeq(&(*list)->next, seq);
@@ -186,14 +190,23 @@ void printTimerList(TimerList list) {
 	}
 }
 
-
+void resendPacketBySeq(int socket, TimerList *list, time_t time, int seq) {
+	if (*list == NULL)
+		return;
+	else if ((*list)->packet.seq == seq) {
+		sendPacket(socket, &(*list)->packet, &(*list)->address, 1);
+		addPacketTimer(list, &(*list)->packet, &(*list)->address, time);
+		removeFirstPacketTimer(list);
+	}
+	else
+		resendPacketBySeq(socket, &(*list)->next, time, seq);
+}
 
 void updateTimers(int socket, TimerList *list, time_t time, int *resendCount) {
 	while (*list != NULL && time >= (*list)->stop) {
 		sendPacket(socket, &(*list)->packet, &(*list)->address, 1);
 		addPacketTimer(list, &(*list)->packet, &(*list)->address, time);
-		removePacketTimerBySeq(list, (*list)->packet.seq);
+		removeFirstPacketTimer(list);
 		(*resendCount)++;
 	}
-	
 }
