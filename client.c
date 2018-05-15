@@ -15,7 +15,7 @@
 #define MAX_RESENDS 10
 #define MAX_SEQUENCE 2
 #define MAX_WINDOWSIZE MAX_SEQUENCE / 2
-#define ACK_SENT_TIMEOUT 2000
+#define ACK_SENT_TIMEOUT 5000
 #define FIN_WAIT_2_TIMEOUT ACK_SENT_TIMEOUT
 
 #define MAX_DATA 3
@@ -41,11 +41,10 @@
 int main(int argc, char **argv) {
 	int state = CLOSED, receiveStatus, on = 1, currentSeq = 0, buffersize = 0, i;
 	int slidingWindowIndexFirst = 0, slidingWindowIndexLast = 0;
-	struct client client = { 0 };
 	struct packet packet;
 	struct sockaddr_in otherAddress;
 	srand(time(NULL));
-	int timer = 0, resendCount = 0, seq = 0, windowsize = MAX_WINDOWSIZE, dataIndex = 0, acksReceived = 0;
+	int resendCount = 0, seq = 0, windowsize = MAX_WINDOWSIZE, dataIndex = 0, acksReceived = 0;
 	TimerList timerList = NULL;
 	struct timespec start, stop;
 	time_t deltaTime = 0, tTimeout = 0;
@@ -105,8 +104,7 @@ int main(int argc, char **argv) {
 				if (receiveStatus == RECEIVE_OK && packet.flags == SYNACK) {
 					resendCount++;
 					
-					createPacket(&packet, ACK, 0, 0, windowsize, NULL);
-					sendPacket(mySocket, &packet, &otherAddress, 0);
+					createAndSendPacket(mySocket, ACK, 0, 0, windowsize, NULL, &otherAddress);
 				}
 				else if(resendCount >= MAX_RESENDS){
 					resendCount = 0;
@@ -122,9 +120,8 @@ int main(int argc, char **argv) {
 				break;
 			case WAIT:
 				if (dataIndex == MAX_DATA && acksReceived == MAX_DATA) {
-					createPacket(&packet, FIN, 0, currentSeq, windowsize, NULL);
-					sendPacket(mySocket, &packet, &otherAddress, 0);
-					addPacketTimer(&timerList, &packet, &otherAddress, deltaTime);
+					
+					createAndSendPacketWithResendTimer(mySocket, FIN, 0, currentSeq, windowsize, NULL, &otherAddress, &timerList, deltaTime);
 					printf(ANSI_WHITE"WAIT GOING TO FIN_WAIT_1\n"ANSI_RESET);
 					state = FIN_WAIT_1;
 					
@@ -135,16 +132,13 @@ int main(int argc, char **argv) {
 					slidingWindowIndexFirst = 0;
 				}
 				else if (dataIndex != MAX_DATA && currentSeq != (slidingWindowIndexLast + 1) % MAX_SEQUENCE) { // SEND DATA
-					createPacket(&packet, FRAME, 0, currentSeq, windowsize, data[dataIndex]);
-					sendPacket(mySocket, &packet, &otherAddress, 0);
-					addPacketTimer(&timerList, &packet, &otherAddress, deltaTime);
+					createAndSendPacketWithResendTimer(mySocket, FRAME, 0, currentSeq, windowsize, data[dataIndex], &otherAddress, &timerList, deltaTime);					
 					
 					currentSeq = (currentSeq + 1) % MAX_SEQUENCE;
 					dataIndex++;
 				}
 				else if (resendCount >= MAX_RESENDS) {
-					createPacket(&packet, FIN, 0, currentSeq, windowsize, NULL);
-					sendPacket(mySocket, &packet, &otherAddress, 0);
+					createAndSendPacketWithResendTimer(mySocket, FIN, 0, currentSeq, windowsize, NULL, &otherAddress, &timerList, deltaTime);
 					printf(ANSI_WHITE"WAIT GOING TO FIN_WAIT_1 - NO RESPONSE FROM SERVER"ANSI_RESET);
 					state = FIN_WAIT_1;
 				}
@@ -231,9 +225,8 @@ int main(int argc, char **argv) {
 				else if (receiveStatus == RECEIVE_OK && packet.flags == FIN) {
 					removePacketTimerBySeq(&timerList, packet.seq);
 					resendCount = 0;
-					createPacket(&packet, ACK, 0, packet.seq, windowsize, NULL);
-					sendPacket(mySocket, &packet, &otherAddress, 0);
-					addPacketTimer(&timerList, &packet, &otherAddress, deltaTime);
+					createAndSendPacketWithResendTimer(mySocket, ACK, 0, packet.seq, windowsize, NULL, &otherAddress, &timerList, deltaTime);
+
 					printf(ANSI_WHITE"FIN_WAIT_1 GOING TO CLOSING\n"ANSI_RESET);
 					state = CLOSING;
 				}
@@ -244,8 +237,7 @@ int main(int argc, char **argv) {
 	 				state = CLOSED;
 				}
 				else if(receiveStatus == RECEIVE_OK && packet.flags == FIN) {
-					createPacket(&packet, ACK, 0, packet.seq, windowsize, NULL);
-					sendPacket(mySocket, &packet, &otherAddress, 0);
+					createAndSendPacket(mySocket, ACK, 0, packet.seq, windowsize, NULL, &otherAddress);
 					printf(ANSI_WHITE"FIN_WAIT_2 GOING TO TIME_WAIT\n"ANSI_RESET);
 					state = TIME_WAIT;
 					tTimeout = deltaTime;

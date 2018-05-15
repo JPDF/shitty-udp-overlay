@@ -79,7 +79,7 @@ int receivePacket(const int mySocket, struct packet *packet, struct sockaddr_in 
 }
 
 void sendPacket(const int mySocket, const struct packet *packet, const struct sockaddr_in *destination, int isResend) {
-	int chance = rand()%2;
+	int chance = 1;//rand()%2;
 	
 	if (isResend)
 		printf(ANSI_YELLOW"RESENT: ");
@@ -132,7 +132,7 @@ int isPacketBroken(struct packet *packet) {
 	return 1;
 }
 
-void addPacketTimer(TimerList *list, struct packet *packet, struct sockaddr_in *address, time_t startTime) {
+void addPacketTimer(TimerList *list, const struct packet *packet, const struct sockaddr_in *address, time_t startTime) {
 	struct packetTimer *timer;
 	if (*list == NULL) {
 	
@@ -156,7 +156,6 @@ void addPacketTimer(TimerList *list, struct packet *packet, struct sockaddr_in *
 
 void removePacketTimerBySeq(TimerList *list, int seq) {
 	struct packetTimer *temp;
-	struct packetTimer *current = *list; 
 	if (*list == NULL)
 		return;
 	if ((*list)->packet.seq == seq) {

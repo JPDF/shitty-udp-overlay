@@ -39,7 +39,7 @@ struct packetTimer {
 };
 typedef struct packetTimer *TimerList;
 
-void addPacketTimer(TimerList *list, struct packet *packet, struct sockaddr_in *address, time_t startTime);
+void addPacketTimer(TimerList *list, const struct packet *packet, const struct sockaddr_in *address, time_t startTime);
 
 void removePacketTimerBySeq(TimerList *list, int seq);
 
