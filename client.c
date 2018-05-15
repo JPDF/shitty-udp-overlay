@@ -151,8 +151,8 @@ int main(int argc, char **argv) {
 						switch (state) {
 							case ACK_RECEIVED:
 								resendCount = 0;
-								if ((slidingWindowIndexFirst <= slidingWindowIndexLast && packet.seq >= slidingWindowIndexFirst && packet.seq <= slidingWindowIndexLast) ||
-										(slidingWindowIndexFirst > slidingWindowIndexLast && (packet.seq >= slidingWindowIndexFirst && packet.seq <= MAX_SEQUENCE-1) || (packet.seq <= slidingWindowIndexLast && packet.seq >= 0))) {
+								if (((slidingWindowIndexFirst <= slidingWindowIndexLast) && (packet.seq >= slidingWindowIndexFirst) && (packet.seq <= slidingWindowIndexLast)) ||
+										((slidingWindowIndexFirst > slidingWindowIndexLast) && (packet.seq >= slidingWindowIndexFirst && packet.seq <= MAX_SEQUENCE-1) || (packet.seq <= slidingWindowIndexLast && packet.seq >= 0))) {
 									// INSIDE WINDOW
 									removePacketTimerBySeq(&timerList, packet.seq);
 									printf(ANSI_WHITE"ACK_RECEIVED GOING TO ACK_IN_WINDOW\n"ANSI_RESET);

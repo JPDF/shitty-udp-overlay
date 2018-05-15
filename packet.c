@@ -181,7 +181,7 @@ void printTimerList(TimerList list) {
 					 list->packet.data,
 					 inet_ntoa(list->address.sin_addr),
 					 ntohs(list->address.sin_port));
-		printf(ANSI_GREEN"WITH START:%d STOP:%d\n"ANSI_RESET, list->start, list->stop);
+		printf(ANSI_GREEN"WITH START:%ld STOP:%ld\n"ANSI_RESET, list->start, list->stop);
 		printTimerList(list->next);
 	}
 }
