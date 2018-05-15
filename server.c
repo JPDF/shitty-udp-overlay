@@ -69,7 +69,6 @@ int main() {
 	struct timespec start, stop;
 	time_t deltaTime = 0, tTimeout = 0;
 	char *finalBuffer = NULL;
-	char dataBuffer[10];
 	
 	createPacket(&packet, SYN, 0, 100, 200, "bla");
 	if (!isPacketBroken(&packet))
@@ -178,20 +177,19 @@ int main() {
 										}
 									}
 								}
-								strcpy(dataBuffer, packet.data);
 								createPacket(&packet, ACK, 0, packet.seq, windowsize, NULL);
 								sendPacket(mySocket, &packet, &otherAddress, 0);
 								break;
 							case MOVE_WINDOW:
 								if(finalBuffer == NULL){
-									finalBuffer = malloc(strlen(dataBuffer)+1);
+									finalBuffer = malloc(strlen(packet.data)+1);
 									strcpy(finalBuffer, "Med:");
 								}
 								else 
-									finalBuffer = (char*)realloc(finalBuffer, strlen(finalBuffer) + strlen(dataBuffer) + 1);
+									finalBuffer = (char*)realloc(finalBuffer, strlen(finalBuffer) + strlen(packet.data) + 1);
 								if (finalBuffer == NULL)
 									fatalerror("failed to malloc/realloc finalBuffer\n");
-								strcat(finalBuffer, dataBuffer);
+								strcat(finalBuffer, packet.data);
 								slidingWindowIndexFirst = (slidingWindowIndexFirst+1) % MAX_SEQUENCE;
 								slidingWindowIndexLast = (slidingWindowIndexLast+1) % MAX_SEQUENCE;
 								printf(ANSI_WHITE"MOVE_WINDOW GOING TO BUFFER\n"ANSI_RESET);
@@ -204,7 +202,6 @@ int main() {
 										state = MOVE_WINDOW;
 										packet = windowBuffer[i];
 										windowBuffer[i].seq = -1;
-										strcpy(dataBuffer, packet.data);
 										break;
 									}
 								}	
