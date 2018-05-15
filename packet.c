@@ -79,7 +79,7 @@ int receivePacket(const int mySocket, struct packet *packet, struct sockaddr_in 
 }
 
 void sendPacket(const int mySocket, const struct packet *packet, const struct sockaddr_in *destination, int isResend) {
-	int chance = 1;//rand()%2;
+	int chance = rand()%2;
 	
 	if (isResend)
 		printf(ANSI_YELLOW"RESENT: ");
@@ -102,6 +102,19 @@ void sendPacket(const int mySocket, const struct packet *packet, const struct so
 		printf(ANSI_RED"SNEAKY NINJA THREW AWAY PACKAGE\n"ANSI_RESET);
 }
 
+void createAndSendPacket(int mySocket, int flags, int id, int seq, int windowsize, char *data, const struct sockaddr_in *destination) {
+	struct packet packet;
+	createPacket(&packet, flags, id, seq, windowsize, data);
+	sendPacket(mySocket, &packet, destination, 0);
+}
+
+void createAndSendPacketWithResendTimer(int mySocket, int flags, int id, int seq, int windowsize, char *data, const struct sockaddr_in *destination, TimerList *list, time_t time) {
+	struct packet packet;
+	createPacket(&packet, flags, id, seq, windowsize, data);
+	sendPacket(mySocket, &packet, destination, 0);
+	addPacketTimer(list, &packet, destination, time);
+}
+
 int isPacketBroken(struct packet *packet) {
 	uint32_t checksum = packet->crc;
 	packet->crc = 0;
@@ -119,17 +132,9 @@ int isPacketBroken(struct packet *packet) {
 	return 1;
 }
 
-void addPacketTimer(TimerList *list, struct packet *packet, struct sockaddr_in *address, time_t startTime, time_t timeout) {
+void addPacketTimer(TimerList *list, struct packet *packet, struct sockaddr_in *address, time_t startTime) {
 	struct packetTimer *timer;
 	if (*list == NULL) {
-		printf(ANSI_GREEN "ADDED TO TIMER LIST %s [id:"ANSI_BLUE"%d"ANSI_GREEN" seq:"ANSI_BLUE"%d"ANSI_GREEN" ws:"ANSI_BLUE"%d"ANSI_GREEN" data:"ANSI_BLUE"%s"ANSI_GREEN"] to"ANSI_BLUE" %s" ANSI_GREEN":" ANSI_BLUE"%d\n"ANSI_RESET,
-					 getFlagString(packet->flags),
-					 packet->id,
-					 packet->seq,
-					 packet->windowsize,
-					 packet->data,
-					 inet_ntoa(address->sin_addr),
-					 ntohs(address->sin_port));
 	
 		timer = malloc(sizeof(struct packetTimer));
 		if (timer == NULL)
@@ -137,16 +142,16 @@ void addPacketTimer(TimerList *list, struct packet *packet, struct sockaddr_in *
 		timer->address = *address;
 		timer->packet = *packet;
 		timer->start = startTime;
-		timer->stop = startTime + timeout;
+		timer->stop = startTime + RESEND_TIMEOUT;
 		timer->next = NULL;
 	
-		printf(ANSI_GREEN"WITH START:%d STOP:%d\n"ANSI_RESET, timer->start, timer->stop);
+		printf(ANSI_GREEN"ADDED TO TIMER LIST WITH START:%d STOP:%d\n"ANSI_RESET, (int)timer->start, (int)timer->stop);
 	
 		*list = timer;
 		(*list)->next = NULL;
 	}
 	else
-		addPacketTimer(&(*list)->next, packet, address, startTime, timeout);
+		addPacketTimer(&(*list)->next, packet, address, startTime);
 }
 
 void removePacketTimerBySeq(TimerList *list, int seq) {
@@ -157,14 +162,7 @@ void removePacketTimerBySeq(TimerList *list, int seq) {
 	if ((*list)->packet.seq == seq) {
 		temp = *list;
 		
-		printf(ANSI_GREEN "DELETED FROM TIMER LIST %s [id:"ANSI_BLUE"%d"ANSI_GREEN" seq:"ANSI_BLUE"%d"ANSI_GREEN" ws:"ANSI_BLUE"%d"ANSI_GREEN" data:"ANSI_BLUE"%s"ANSI_GREEN"] to"ANSI_BLUE" %s" ANSI_GREEN":" ANSI_BLUE"%d\n"ANSI_RESET,
-				 getFlagString(temp->packet.flags),
-				 temp->packet.id,
-				 temp->packet.seq,
-				 temp->packet.windowsize,
-				 temp->packet.data,
-				 inet_ntoa(temp->address.sin_addr),
-				 ntohs(temp->address.sin_port));
+		printf(ANSI_GREEN "DELETED FROM TIMER LIST %d\n"ANSI_RESET, temp->packet.seq);
 		
 		(*list) = temp->next;
 		free(temp);
@@ -194,7 +192,7 @@ void printTimerList(TimerList list) {
 void updateTimers(int socket, TimerList *list, time_t time, int *resendCount) {
 	while (*list != NULL && time >= (*list)->stop) {
 		sendPacket(socket, &(*list)->packet, &(*list)->address, 1);
-		addPacketTimer(list, &(*list)->packet, &(*list)->address, time, (*list)->stop - (*list)->start);
+		addPacketTimer(list, &(*list)->packet, &(*list)->address, time);
 		removePacketTimerBySeq(list, (*list)->packet.seq);
 		(*resendCount)++;
 	}

@@ -5,6 +5,8 @@
 #include <sys/types.h>
 #include <netinet/in.h>
 
+#define RESEND_TIMEOUT 1000
+
 // FLAGS
 #define SYN 1
 #define SYNACK 2 
@@ -37,7 +39,7 @@ struct packetTimer {
 };
 typedef struct packetTimer *TimerList;
 
-void addPacketTimer(TimerList *list, struct packet *packet, struct sockaddr_in *address, time_t startTime, time_t timeout);
+void addPacketTimer(TimerList *list, struct packet *packet, struct sockaddr_in *address, time_t startTime);
 
 void removePacketTimerBySeq(TimerList *list, int seq);
 
@@ -63,6 +65,8 @@ int receivePacket(const int mySocket, struct packet *packet, struct sockaddr_in 
  *	destination: The destination to send the packet
  * Returns -1 on error, 0 on timeout or amounts of bytes read */
 void sendPacket(const int mySocket, const struct packet *packet, const struct sockaddr_in *destination, int isResend);
+void createAndSendPacket(int mySocket, int flags, int id, int seq, int windowsize, char *data, const struct sockaddr_in *destination);
+void createAndSendPacketWithResendTimer(int mySocket, int flags, int id, int seq, int windowsize, char *data, const struct sockaddr_in *destination, TimerList *list, time_t time);
 
 /* Checks if a packet is broken using CRC (Cyclic Redundancy Check)
  * Also resets the crc-field of the packet 

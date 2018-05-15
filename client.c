@@ -15,7 +15,7 @@
 #define MAX_RESENDS 10
 #define MAX_SEQUENCE 2
 #define MAX_WINDOWSIZE MAX_SEQUENCE / 2
-#define ACK_SENT_TIMEOUT 5000
+#define ACK_SENT_TIMEOUT 2000
 #define FIN_WAIT_2_TIMEOUT ACK_SENT_TIMEOUT
 
 #define MAX_DATA 3
@@ -76,9 +76,7 @@ int main(int argc, char **argv) {
 	
 		switch (state) {
 			case CLOSED:
-				createPacket(&packet, SYN, 0, seq, windowsize, NULL);
-				sendPacket(mySocket, &packet, &otherAddress, 0);
-				addPacketTimer(&timerList, &packet, &otherAddress, deltaTime, TIMEOUT);
+				createAndSendPacketWithResendTimer(mySocket, SYN, 0, seq, windowsize, NULL, &otherAddress, &timerList, deltaTime);
 				state = SYN_SENT;
 				break;
 			case SYN_SENT:
@@ -92,9 +90,7 @@ int main(int argc, char **argv) {
 					memset(windowBuffer, -1, sizeof(*windowBuffer));
 					if (windowBuffer == NULL)
 						fatalerror("Failed to malloc window buffer");
-						
-					createPacket(&packet, ACK, 0, seq, windowsize, NULL);
-					sendPacket(mySocket, &packet, &otherAddress, 0);
+					createAndSendPacket(mySocket, ACK, 0, seq, windowsize, NULL, &otherAddress);
 					state = ACK_SENT;
 					tTimeout = deltaTime;
 					resendCount = 0;
@@ -108,6 +104,7 @@ int main(int argc, char **argv) {
 			case ACK_SENT:
 				if (receiveStatus == RECEIVE_OK && packet.flags == SYNACK) {
 					resendCount++;
+					
 					createPacket(&packet, ACK, 0, 0, windowsize, NULL);
 					sendPacket(mySocket, &packet, &otherAddress, 0);
 				}
@@ -127,21 +124,31 @@ int main(int argc, char **argv) {
 				if (dataIndex == MAX_DATA && acksReceived == MAX_DATA) {
 					createPacket(&packet, FIN, 0, currentSeq, windowsize, NULL);
 					sendPacket(mySocket, &packet, &otherAddress, 0);
-					addPacketTimer(&timerList, &packet, &otherAddress, deltaTime, TIMEOUT);
+					addPacketTimer(&timerList, &packet, &otherAddress, deltaTime);
 					printf(ANSI_WHITE"WAIT GOING TO FIN_WAIT_1\n"ANSI_RESET);
 					state = FIN_WAIT_1;
 					
+					resendCount = 0;
 					acksReceived = 0;
 					dataIndex = 0;
+					currentSeq = 0;
+					slidingWindowIndexFirst = 0;
 				}
 				else if (dataIndex != MAX_DATA && currentSeq != (slidingWindowIndexLast + 1) % MAX_SEQUENCE) { // SEND DATA
 					createPacket(&packet, FRAME, 0, currentSeq, windowsize, data[dataIndex]);
 					sendPacket(mySocket, &packet, &otherAddress, 0);
-					addPacketTimer(&timerList, &packet, &otherAddress, deltaTime, TIMEOUT);
+					addPacketTimer(&timerList, &packet, &otherAddress, deltaTime);
 					
 					currentSeq = (currentSeq + 1) % MAX_SEQUENCE;
 					dataIndex++;
 				}
+				else if (resendCount >= MAX_RESENDS) {
+					createPacket(&packet, FIN, 0, currentSeq, windowsize, NULL);
+					sendPacket(mySocket, &packet, &otherAddress, 0);
+					printf(ANSI_WHITE"WAIT GOING TO FIN_WAIT_1 - NO RESPONSE FROM SERVER"ANSI_RESET);
+					state = FIN_WAIT_1;
+				}
+				
 				if(receiveStatus == RECEIVE_OK && packet.flags == ACK) {
 					printf(ANSI_WHITE"WAIT GOING TO FRAME_RECEIVED\n"ANSI_RESET);
 					state = ACK_RECEIVED;
@@ -149,6 +156,7 @@ int main(int argc, char **argv) {
 					while (state != WAIT) {
 						switch (state) {
 							case ACK_RECEIVED:
+								resendCount = 0;
 								if ((slidingWindowIndexFirst <= slidingWindowIndexLast && packet.seq >= slidingWindowIndexFirst && packet.seq <= slidingWindowIndexLast) ||
 										(slidingWindowIndexFirst > slidingWindowIndexLast && (packet.seq >= slidingWindowIndexFirst && packet.seq <= MAX_SEQUENCE-1) || (packet.seq <= slidingWindowIndexLast && packet.seq >= 0))) {
 									// INSIDE WINDOW
@@ -205,6 +213,7 @@ int main(int argc, char **argv) {
 					}
 				}
 				break;
+				
 			case FIN_WAIT_1:
 				if (resendCount >= MAX_RESENDS) {
 					removePacketTimerBySeq(&timerList, packet.seq);
@@ -224,7 +233,7 @@ int main(int argc, char **argv) {
 					resendCount = 0;
 					createPacket(&packet, ACK, 0, packet.seq, windowsize, NULL);
 					sendPacket(mySocket, &packet, &otherAddress, 0);
-					addPacketTimer(&timerList, &packet, &otherAddress, deltaTime, TIMEOUT);
+					addPacketTimer(&timerList, &packet, &otherAddress, deltaTime);
 					printf(ANSI_WHITE"FIN_WAIT_1 GOING TO CLOSING\n"ANSI_RESET);
 					state = CLOSING;
 				}
