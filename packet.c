@@ -80,6 +80,7 @@ int receivePacket(const int mySocket, struct packet *packet, struct sockaddr_in 
 
 void sendPacket(const int mySocket, struct packet *packet, const struct sockaddr_in *destination, int isResend) {
 	int chance = 1, throwAway = 0;
+	int crc = packet->crc;
 	if (error != 0) {
 		chance = rand() % 3;
 		if ((error == ERROR_CRC || error == ERROR_CHAOS) && chance == 2) {
@@ -110,6 +111,7 @@ void sendPacket(const int mySocket, struct packet *packet, const struct sockaddr
 	}
 	else
 		printf(ANSI_RED"SNEAKY NINJA THREW AWAY PACKAGE\n"ANSI_RESET);
+	packet->crc = crc;
 }
 
 void createAndSendPacket(int mySocket, int flags, int id, int seq, int windowsize, char *data, const struct sockaddr_in *destination) {

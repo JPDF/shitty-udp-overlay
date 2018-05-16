@@ -14,7 +14,7 @@
 #define HEARTBEAT_TIMEOUT 1
 #define TIMEOUT 1000 // The time before timeout on each packet in milliseconds
 #define MAX_RESENDS 10
-#define MAX_SEQUENCE 2
+#define MAX_SEQUENCE 10
 #define MAX_WINDOWSIZE MAX_SEQUENCE / 2
 #define ACK_SENT_TIMEOUT 5000
 #define FIN_WAIT_2_TIMEOUT ACK_SENT_TIMEOUT
@@ -47,7 +47,6 @@
 void hackAndSlashMessage(char *message, char **data, int dataLength){
 	int chunklen;
 	int i;
-	printf("%d\n", dataLength);
 	for(i = 0; i < dataLength; i++){
 		chunklen = strlen(&message[(DATA_LENGHT) * i]);
 		if (chunklen > DATA_LENGHT)
@@ -107,10 +106,10 @@ int main(int argc, char **argv) {
 				while (state != CLOSED){
 					switch (state){
 						case (MESSAGE_MENU):
-							clear();
-							printf("Type a message to send up to 100 characters long\n");
+							//clear();
+							printf("\n\n\nType a message to send up to 100 characters long\n");
 							if(fgets(message, 101, stdin)!=NULL) {
-								clear();
+								//clear();
 								state = ERROR_MENU;
 								message[strlen(message) - 1] = '\0';
 							}
@@ -118,8 +117,8 @@ int main(int argc, char **argv) {
 							
 						case (ERROR_MENU):
 							printf("How do you want to mess up?\n0. Everything like heaven\n1. Lost frames\n2. Broken crc\n3. CHAOS!!1!!\n");
-							scanf("%d", &errorChoice);
-							clear();
+							scanf("%d%*c", &errorChoice);
+							//clear();
 							if(errorChoice >= 0 && errorChoice <= 3)
 								state = CLOSED;
 							else
@@ -130,6 +129,8 @@ int main(int argc, char **argv) {
 				error = errorChoice;
 				dataCount = ceil((float)strlen(message)/(float)(DATA_LENGHT));
 				hackAndSlashMessage(message, data, dataCount);
+				clock_gettime(CLOCK_MONOTONIC, &stop);
+				deltaTime = (stop.tv_sec * 1000 + stop.tv_nsec / 1000000) - (start.tv_sec * 1000 + start.tv_nsec / 1000000);
 				createAndSendPacketWithResendTimer(mySocket, SYN, 0, seq, windowsize, NULL, &otherAddress, &timerList, deltaTime);
 				state = SYN_SENT;
 				break;
@@ -149,7 +150,7 @@ int main(int argc, char **argv) {
 					tTimeout = deltaTime;
 					resendCount = 0;
 				}
-				if (resendCount == MAX_RESENDS) {
+				else if (resendCount >= MAX_RESENDS) {
 					resendCount = 0;
 					state = CLOSED;
 					printf(ANSI_WHITE"SYN_SENT GOING TO CLOSED - MAX RESENDS REACHED (SYN)"ANSI_RESET "\n");
@@ -235,6 +236,7 @@ int main(int argc, char **argv) {
 											break;
 										}
 									}
+									state = WAIT;
 									printf(ANSI_WHITE"ACK NOT FIRST, PUT IN WINDOW BUFFER AT %d"ANSI_RESET, i);
 								}
 								break;
@@ -257,7 +259,7 @@ int main(int argc, char **argv) {
 								}
 								if (state != MOVE_WINDOW) {
 									state = WAIT;
-									printf(ANSI_WHITE"BUFFER GOING TO WAIT - NO FRAME IN BUFFER IS FIRST IN WINDOW\n"ANSI_RESET);
+									printf(ANSI_WHITE"BUFFER GOING TO WAIT - NO ACK IN BUFFER IS FIRST IN WINDOW\n"ANSI_RESET);
 								}
 								break;
 						}
