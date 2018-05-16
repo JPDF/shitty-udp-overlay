@@ -72,6 +72,7 @@ int main() {
 	struct sockaddr_in otherAddress;
 	int resendCount = 0;
 	int windowsize = WINDOW_SIZE;
+	int maxSequence = MAX_SEQUENCE;
 	int slidingWindowIndexFirst = 0, slidingWindowIndexLast = 0;
 	struct packet *windowBuffer;
 	TimerList timerList = NULL;
@@ -89,6 +90,8 @@ int main() {
 	while (1) {
 		switch (state) {
 			case INIT:
+				windowsize = WINDOW_SIZE;
+				maxSequence = MAX_SEQUENCE;
 				printf(ANSI_WHITE"WAITING FOR CONNECTION..."ANSI_RESET "\n");
 				state = LISTEN;
 				break;
@@ -96,6 +99,7 @@ int main() {
 				if (receiveStatus == RECEIVE_OK && packet.flags == SYN) {
 					if(windowsize > packet.windowsize){
 						windowsize = packet.windowsize;
+						maxSequence = 2*packet.windowsize;
 					}
 					
 					createAndSendPacketWithResendTimer(mySocket,SYNACK, 0, 0, windowsize, NULL, &otherAddress, &timerList, deltaTime);
@@ -154,8 +158,7 @@ int main() {
 									printf(ANSI_WHITE"FRAME_RECEIVED GOING TO WAIT - FRAME BROKEN SENDING NACK\n"ANSI_RESET);
 									state = WAIT;
 								}
-								else if (((slidingWindowIndexFirst <= slidingWindowIndexLast) && (packet.seq >= slidingWindowIndexFirst) && (packet.seq <= slidingWindowIndexLast)) ||
-										((slidingWindowIndexFirst > slidingWindowIndexLast && (packet.seq >= slidingWindowIndexFirst && packet.seq <= MAX_SEQUENCE-1)) || (packet.seq <= slidingWindowIndexLast && packet.seq >= 0))) {
+								else if (((slidingWindowIndexFirst <= slidingWindowIndexLast) && (packet.seq >= slidingWindowIndexFirst) && (packet.seq <= slidingWindowIndexLast)) || ((slidingWindowIndexFirst > slidingWindowIndexLast && (packet.seq >= slidingWindowIndexFirst && packet.seq <= maxSequence-1)) || (packet.seq <= slidingWindowIndexLast && packet.seq >= 0))) {
 									// INSIDE WINDOW
 									removePacketTimerBySeq(&timerList, packet.seq);
 									printf(ANSI_WHITE"FRAME_RECEIVED GOING TO FRAME_IN_WINDOW\n"ANSI_RESET);
@@ -174,11 +177,11 @@ int main() {
 									state = MOVE_WINDOW;
 								}
 								else{
-									if (isAlreadyBuffered(windowBuffer, windowsize-1, packet.seq)) {
+									if (!isAlreadyBuffered(windowBuffer, windowsize-1, packet.seq)) {
 										for(int i = 0; i < windowsize-1;i++){
 											if(windowBuffer[i].seq==-1 || windowBuffer[i].seq == packet.seq){
 												windowBuffer[i]=packet;
-												printf(ANSI_WHITE"FRAME_IN_WINDOW GOING TO BUFFER - FRAME IS NOT FIRST");
+												printf(ANSI_WHITE"FRAME_IN_WINDOW GOING TO BUFFER - FRAME IS NOT FIRST\n"ANSI_RESET);
 												break;
 											}
 										}
@@ -197,17 +200,9 @@ int main() {
 									finalBuffer = (char*)realloc(finalBuffer, strlen(finalBuffer)+strlen(packet.data)+1);
 								if (finalBuffer == NULL)
 									fatalerror("Failed to malloc/realloc finalBuffer");
-								if(finalBuffer == NULL){
-									finalBuffer = malloc(strlen(packet.data)+1);
-									strcpy(finalBuffer, "Med:");
-								}
-								else 
-									finalBuffer = (char*)realloc(finalBuffer, strlen(finalBuffer) + strlen(packet.data) + 1);
-								if (finalBuffer == NULL)
-									fatalerror("failed to malloc/realloc finalBuffer\n");
 								strcat(finalBuffer, packet.data);
-								slidingWindowIndexFirst = (slidingWindowIndexFirst+1) % MAX_SEQUENCE;
-								slidingWindowIndexLast = (slidingWindowIndexLast+1) % MAX_SEQUENCE;
+								slidingWindowIndexFirst = (slidingWindowIndexFirst+1) % maxSequence;
+								slidingWindowIndexLast = (slidingWindowIndexLast+1) % maxSequence;
 								printf(ANSI_WHITE"MOVE_WINDOW GOING TO BUFFER\n"ANSI_RESET);
 								state = BUFFER;
 							
