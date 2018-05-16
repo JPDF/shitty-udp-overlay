@@ -19,8 +19,6 @@
 #define ACK_SENT_TIMEOUT 5000
 #define FIN_WAIT_2_TIMEOUT ACK_SENT_TIMEOUT
 
-#define MAX_DATA 3
-
 // STATES
 #define CLOSED 0
 #define SYN_SENT 1
@@ -43,19 +41,20 @@
 #define CLOSING 22
 #define TIME_WAIT 23
 
+#define MAX_MESSAGE 101
 
-void hackAndSlashMessage(char *message, char **data, int *dataLength){
-	int len = strlen(message); //+1?
+
+void hackAndSlashMessage(char *message, char **data, int dataLength){
 	int chunklen;
 	int i;
-	*dataLength = ceil(len/DATA_LENGHT);
-	data = malloc(*dataLength);
-	for(i = 0; i < *dataLength ; i++){
-		chunklen = strlen(&message[DATA_LENGHT * i]);
+	printf("%d\n", dataLength);
+	for(i = 0; i < dataLength; i++){
+		chunklen = strlen(&message[(DATA_LENGHT) * i]);
 		if (chunklen > DATA_LENGHT)
 			chunklen = DATA_LENGHT;
+		
 		data[i] = malloc(chunklen + 1);
-		data[i] = strncpy(data[i], &message[DATA_LENGHT*i], chunklen);
+		strncpy(data[i], &message[DATA_LENGHT*i], chunklen);
 		data[i][chunklen] = '\0';
 	}
 }
@@ -76,10 +75,10 @@ int main(int argc, char **argv) {
 	time_t deltaTime = 0, tTimeout = 0;
 	int *windowBuffer;
 	int errorChoice;
-	char message[101];
+	char message[MAX_MESSAGE];
 	
-	char **data = NULL;
-	int dataCount;
+	char *data[(int)ceil((float)MAX_MESSAGE/(float)DATA_LENGHT)];
+	int dataCount = 0;
 	
 	if (argc < 3)
 		fatalerror("Too few arguments");
@@ -100,19 +99,21 @@ int main(int argc, char **argv) {
 	
 		switch (state) {
 			case CLOSED:
-				if (data != NULL) {
-					free(data);
-					data = NULL;
-				}
 				state = MESSAGE_MENU;
+				for (i = 0; i < dataCount; i++) {
+					if (data[i] != NULL)
+						free(data[i]);
+				}
 				while (state != CLOSED){
 					switch (state){
 						case (MESSAGE_MENU):
 							clear();
 							printf("Type a message to send up to 100 characters long\n");
-							if(fgets(message, 101, stdin)!=NULL)
+							if(fgets(message, 101, stdin)!=NULL) {
 								clear();
 								state = ERROR_MENU;
+								message[strlen(message) - 1] = '\0';
+							}
 							break;
 							
 						case (ERROR_MENU):
@@ -125,9 +126,10 @@ int main(int argc, char **argv) {
 								printf("User selected fucket up\n");
 							break;
 					}
-					error = errorChoice;
 				}
-				hackAndSlashMessage(message, data, &dataCount);
+				error = errorChoice;
+				dataCount = ceil((float)strlen(message)/(float)(DATA_LENGHT));
+				hackAndSlashMessage(message, data, dataCount);
 				createAndSendPacketWithResendTimer(mySocket, SYN, 0, seq, windowsize, NULL, &otherAddress, &timerList, deltaTime);
 				state = SYN_SENT;
 				break;
@@ -172,7 +174,7 @@ int main(int argc, char **argv) {
 			
 				break;
 			case WAIT:
-				if (dataIndex == MAX_DATA && acksReceived == MAX_DATA) {
+				if (dataIndex == dataCount && acksReceived == dataCount) {
 					createAndSendPacketWithResendTimer(mySocket, FIN, 0, currentSeq, windowsize, NULL, &otherAddress, &timerList, deltaTime);
 					printf(ANSI_WHITE"WAIT GOING TO FIN_WAIT_1\n"ANSI_RESET);
 					state = FIN_WAIT_1;
@@ -207,7 +209,7 @@ int main(int argc, char **argv) {
 							case ACK_RECEIVED:
 								resendCount = 0;
 								if (((slidingWindowIndexFirst <= slidingWindowIndexLast) && (packet.seq >= slidingWindowIndexFirst) && (packet.seq <= slidingWindowIndexLast)) ||
-										((slidingWindowIndexFirst > slidingWindowIndexLast) && (packet.seq >= slidingWindowIndexFirst && packet.seq <= MAX_SEQUENCE-1) || (packet.seq <= slidingWindowIndexLast && packet.seq >= 0))) {
+										((slidingWindowIndexFirst > slidingWindowIndexLast && (packet.seq >= slidingWindowIndexFirst && packet.seq <= MAX_SEQUENCE-1)) || (packet.seq <= slidingWindowIndexLast && packet.seq >= 0))) {
 									// INSIDE WINDOW
 									removePacketTimerBySeq(&timerList, packet.seq);
 									printf(ANSI_WHITE"ACK_RECEIVED GOING TO ACK_IN_WINDOW\n"ANSI_RESET);

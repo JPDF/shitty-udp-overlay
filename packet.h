@@ -32,7 +32,7 @@ struct packet{
 	int seq;
 	int windowsize;
 	int crc;
-	char data[DATA_LENGHT];
+	char data[DATA_LENGHT + 1];
 };
 
 struct packetTimer {
