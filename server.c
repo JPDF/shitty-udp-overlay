@@ -92,9 +92,18 @@ int main() {
 			case INIT:
 				windowsize = WINDOW_SIZE;
 				maxSequence = MAX_SEQUENCE;
-				printf(ANSI_WHITE"WAITING FOR CONNECTION..."ANSI_RESET "\n");
-				state = LISTEN;
+				while(state == INIT){
+					printf("How do you want to mess up?\n0. Everything like heaven\n1. Lost frames\n2. Broken crc\n3. CHAOS!!1!!\n");
+					scanf("%d%*c", &error);
+					if(error >= 0 && error <= 3){
+						printf(ANSI_WHITE"WAITING FOR CONNECTION..."ANSI_RESET "\n");
+						state = LISTEN;
+					}
+					else
+						printf("User selected fucket up\n");
+				}
 				break;
+
 			case LISTEN:
 				if (receiveStatus == RECEIVE_OK && packet.flags == SYN) {
 					if(windowsize > packet.windowsize){

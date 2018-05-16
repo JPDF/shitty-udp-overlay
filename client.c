@@ -81,7 +81,6 @@ int main(int argc, char **argv) {
 	struct timespec start, stop;
 	time_t deltaTime = 0, tTimeout = 0;
 	int *windowBuffer;
-	int errorChoice;
 	char message[MAX_MESSAGE];
 	
 	char *data[(int)ceil((float)MAX_MESSAGE/(float)DATA_LENGHT)];
@@ -127,16 +126,15 @@ int main(int argc, char **argv) {
 							
 						case (ERROR_MENU):
 							printf("How do you want to mess up?\n0. Everything like heaven\n1. Lost frames\n2. Broken crc\n3. CHAOS!!1!!\n");
-							scanf("%d%*c", &errorChoice);
+							scanf("%d%*c", &error);
 							//clear();
-							if(errorChoice >= 0 && errorChoice <= 3)
+							if(error >= 0 && error <= 3)
 								state = CLOSED;
 							else
 								printf("User selected fucket up\n");
 							break;
 					}
 				}
-				error = errorChoice;
 				dataCount = ceil((float)strlen(message)/(float)(DATA_LENGHT));
 				hackAndSlashMessage(message, data, dataCount);
 				clock_gettime(CLOCK_MONOTONIC, &stop);
