@@ -29,7 +29,7 @@
 #define CLOSE_WAIT 20
 #define LAST_ACK 21
 //SLIDING WINDOW SIZE
-#define MAX_SEQUENCE 2
+#define MAX_SEQUENCE 10
 #define WINDOW_SIZE MAX_SEQUENCE/2
 
 int makeSocket(int port) {
@@ -182,6 +182,7 @@ int main() {
 									for(int i = 0; i < windowsize-1;i++){
 										if(windowBuffer[i].seq==-1){
 											windowBuffer[i]=packet;
+											printf(ANSI_WHITE"FRAME_IN_WINDOW GOING TO BUFFER - FRAME IS NOT FIRST");
 											state = BUFFER;
 											break;
 										}

@@ -18,7 +18,7 @@
 #define RECEIVE_OK 1
 #define RECEIVE_TIMEOUT 0
 #define RECEIVE_BROKEN -1
-#define DATA_LENGHT 10
+#define DATA_LENGHT 1
 
 #define ERROR_LOST_FRAME 1
 #define ERROR_CRC 2
