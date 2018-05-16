@@ -52,6 +52,15 @@ int makeSocket(int port) {
 
 /* Handles received packets and set the state accordingly.
    Packet is NULL if timeout occured */
+   
+int isAlreadyBuffered(struct packet *buffer, int size, int seq) {
+	int i;
+	for (i = 0; i < size; i++) {
+		if (buffer[i].seq == seq)
+			return 1;
+	}
+	return 0;
+}
 
 
 int main() {
@@ -165,11 +174,13 @@ int main() {
 									state = MOVE_WINDOW;
 								}
 								else{
-									for(int i = 0; i < windowsize-1;i++){
-										if(windowBuffer[i].seq==-1 && windowBuffer[i].seq != packet.seq){
-											windowBuffer[i]=packet;
-											printf(ANSI_WHITE"FRAME_IN_WINDOW GOING TO BUFFER - FRAME IS NOT FIRST");
-											break;
+									if (isAlreadyBuffered(windowBuffer, windowsize-1, packet.seq)) {
+										for(int i = 0; i < windowsize-1;i++){
+											if(windowBuffer[i].seq==-1 || windowBuffer[i].seq == packet.seq){
+												windowBuffer[i]=packet;
+												printf(ANSI_WHITE"FRAME_IN_WINDOW GOING TO BUFFER - FRAME IS NOT FIRST");
+												break;
+											}
 										}
 									}
 									state = BUFFER;

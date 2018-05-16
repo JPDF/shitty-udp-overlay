@@ -58,8 +58,14 @@ void hackAndSlashMessage(char *message, char **data, int dataLength){
 	}
 }
 
-
-
+int isAlreadyBuffered(int *buffer, int size, int seq) {
+	int i;
+	for (i = 0; i < size; i++) {
+		if (buffer[i] == seq)
+			return 1;
+	}
+	return 0;
+}
 
 
 int main(int argc, char **argv) {
@@ -141,6 +147,7 @@ int main(int argc, char **argv) {
 					// saving settings from server
 					windowsize = packet.windowsize;
 					slidingWindowIndexLast = packet.windowsize-1;
+					buffersize = windowsize - 1;
 					windowBuffer = malloc(sizeof(int) * (windowsize - 1));
 					memset(windowBuffer, -1, sizeof(*windowBuffer));
 					if (windowBuffer == NULL)
@@ -230,14 +237,16 @@ int main(int argc, char **argv) {
 									state = MOVE_WINDOW;
 								}
 								else {
-									for (i = 0; i < buffersize; i++) {
-										if (windowBuffer[i] == -1) {
-											windowBuffer[i] = packet.seq;
-											break;
+									if (!isAlreadyBuffered(windowBuffer, buffersize, packet.seq)) {
+										for (i = 0; i < buffersize; i++) {
+											if (windowBuffer[i] == -1 || windowBuffer[i] == packet.seq) {
+												windowBuffer[i] = packet.seq;
+												printf(ANSI_WHITE"ACK NOT FIRST PUT IN WINDOW BUFFER AT %d\n" ANSI_RESET, i);
+												break;
+											}
 										}
 									}
 									state = WAIT;
-									printf(ANSI_WHITE"ACK NOT FIRST, PUT IN WINDOW BUFFER AT %d"ANSI_RESET, i);
 								}
 								break;
 							
