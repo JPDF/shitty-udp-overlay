@@ -51,7 +51,7 @@ void hackAndSlashMessage(char *message, char **data, int *dataLength){
 	*dataLength = ceil(len/DATA_LENGHT);
 	data = malloc(*dataLength);
 	for(i = 0; i < *dataLength ; i++){
-		chunklen = strlen(message[DATA_LENGHT * i]);
+		chunklen = strlen(&message[DATA_LENGHT * i]);
 		if (chunklen > DATA_LENGHT)
 			chunklen = DATA_LENGHT;
 		data[i] = malloc(chunklen + 1);
