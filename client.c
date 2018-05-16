@@ -46,11 +46,17 @@
 
 void hackAndSlashMessage(char *message, char **data, int *dataLength){
 	int len = strlen(message); //+1?
+	int chunklen;
 	int i;
 	*dataLength = ceil(len/DATA_LENGHT);
 	data = malloc(*dataLength);
 	for(i = 0; i < *dataLength ; i++){
-		data[i] = &message[DATA_LENGHT*i];
+		chunklen = strlen(message[DATA_LENGHT * i]);
+		if (chunklen > DATA_LENGHT)
+			chunklen = DATA_LENGHT;
+		data[i] = malloc(chunklen + 1);
+		data[i] = strncpy(data[i], &message[DATA_LENGHT*i], chunklen);
+		data[i][chunklen] = '\0';
 	}
 }
 
@@ -94,11 +100,11 @@ int main(int argc, char **argv) {
 	
 		switch (state) {
 			case CLOSED:
-			if (data != NULL) {
-				free(data);
-				data = NULL;
-			}
-			state = MESSAGE_MENU;
+				if (data != NULL) {
+					free(data);
+					data = NULL;
+				}
+				state = MESSAGE_MENU;
 				while (state != CLOSED){
 					switch (state){
 						case (MESSAGE_MENU):
@@ -179,6 +185,7 @@ int main(int argc, char **argv) {
 				}
 				else if (dataIndex != dataCount && currentSeq != (slidingWindowIndexLast + 1) % MAX_SEQUENCE) { // SEND DATA
 					createAndSendPacketWithResendTimer(mySocket, FRAME, 0, currentSeq, windowsize, data[dataIndex], &otherAddress, &timerList, deltaTime);					
+					
 					currentSeq = (currentSeq + 1) % MAX_SEQUENCE;
 					dataIndex++;
 				}

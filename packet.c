@@ -39,7 +39,7 @@ void createPacket(struct packet *packet, int flags, int id, int seq, int windows
 	packet->crc = 0;
 	packet->data[0] = '\0';
 	if (data != NULL)
-		strncpy(packet->data, data, DATA_LENGHT);
+		strcpy(packet->data, data);
 	packet->crc = crc32(packet, sizeof(*packet));
 }
 
