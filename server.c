@@ -124,9 +124,12 @@ int main() {
 			
 			case WAIT:
 				if (deltaTime - tTimeout > NO_MESSAGE_TIMEOUT) { // TIMEOUT!
-					resendCount = 0;
-					printf("NO MESSAGE RECEIVED. WAIT GOING TO INIT\n");
+					printf(ANSI_WHITE"NO MESSAGE RECEIVED. WAIT GOING TO INIT\n"ANSI_RESET);
 	 				state = INIT;
+					printf(" - - - - %s - - - -\n", finalBuffer);
+					free(finalBuffer);
+					resendCount = 0;
+					finalBuffer = NULL;
 				}
 				else if(receiveStatus == RECEIVE_OK && packet.flags == FRAME){
 					printf(ANSI_WHITE"WAIT GOING TO FRAME_RECEIVED\n"ANSI_RESET);
