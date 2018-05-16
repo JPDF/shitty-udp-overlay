@@ -15,7 +15,7 @@
 #define TIMEOUT 1000 // The time before timeout on each packet in milliseconds
 #define MAX_RESENDS 10
 #define MAX_SEQUENCE 8
-#define MAX_WINDOWSIZE MAX_SEQUENCE / 2
+#define MAX_WINDOWSIZE MAX_SEQUENCE / 2 - 1
 #define ACK_SENT_TIMEOUT 5000
 #define FIN_WAIT_2_TIMEOUT ACK_SENT_TIMEOUT
 #define WAIT_TIMEOUT 10000
@@ -150,7 +150,8 @@ int main(int argc, char **argv) {
 					windowsize = packet.windowsize;
 					slidingWindowIndexLast = packet.windowsize-1;
 					buffersize = windowsize - 1;
-					maxSequence = packet.windowsize*2;
+					maxSequence = (packet.windowsize + 1)*2;
+					printf("%d\n", maxSequence);
 					windowBuffer = malloc(sizeof(int) * (windowsize - 1));
 					for (i = 0; i < buffersize; i++)
 						windowBuffer[i] = -1;
@@ -169,6 +170,7 @@ int main(int argc, char **argv) {
 				break;
 			case ACK_SENT:
 				if (receiveStatus == RECEIVE_OK && packet.flags == SYNACK) {
+					tTimeout = deltaTime;
 					resendCount++;
 					createAndSendPacket(mySocket, ACK, 0, 0, windowsize, NULL, &otherAddress);
 				}
@@ -223,7 +225,7 @@ int main(int argc, char **argv) {
 							case ACK_RECEIVED:
 								resendCount = 0;
 								if (((slidingWindowIndexFirst <= slidingWindowIndexLast) && (packet.seq >= slidingWindowIndexFirst) && (packet.seq <= slidingWindowIndexLast)) ||
-										((slidingWindowIndexFirst > slidingWindowIndexLast && (packet.seq >= slidingWindowIndexFirst && packet.seq <= maxSequence-1)) || (packet.seq <= slidingWindowIndexLast && packet.seq >= 0))) {
+										(slidingWindowIndexFirst > slidingWindowIndexLast && ((packet.seq >= slidingWindowIndexFirst && packet.seq <= maxSequence-1) || (packet.seq <= slidingWindowIndexLast && packet.seq >= 0)))) {
 									// INSIDE WINDOW
 									removePacketTimerBySeq(&timerList, packet.seq);
 									printf(ANSI_WHITE"ACK_RECEIVED GOING TO ACK_IN_WINDOW\n"ANSI_RESET);
