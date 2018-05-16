@@ -180,7 +180,7 @@ int main() {
 								}
 								else{
 									for(int i = 0; i < windowsize-1;i++){
-										if(windowBuffer[i].seq==-1){
+										if(windowBuffer[i].seq==-1 && windowBuffer[i].seq != packet.seq){
 											windowBuffer[i]=packet;
 											printf(ANSI_WHITE"FRAME_IN_WINDOW GOING TO BUFFER - FRAME IS NOT FIRST");
 											state = BUFFER;
@@ -189,6 +189,7 @@ int main() {
 									}
 								}
 								createAndSendPacket(mySocket, ACK, 0, packet.seq, windowsize, NULL, &otherAddress);
+								
 								/*createPacket(&packet, ACK, 0, packet.seq, windowsize, NULL);
 								sendPacket(mySocket, &packet, &otherAddress, 0);*/
 								break;
