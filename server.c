@@ -30,7 +30,7 @@
 #define LAST_ACK 21
 //SLIDING WINDOW SIZE
 #define MAX_SEQUENCE 10
-#define WINDOW_SIZE MAX_SEQUENCE/2
+#define WINDOW_SIZE (MAX_SEQUENCE/2)-1
 
 int makeSocket(int port) {
 	int mySocket;
@@ -108,7 +108,7 @@ int main() {
 				if (receiveStatus == RECEIVE_OK && packet.flags == SYN) {
 					if(windowsize > packet.windowsize){
 						windowsize = packet.windowsize;
-						maxSequence = 2*packet.windowsize;
+						maxSequence = 2*(packet.windowsize+1);
 					}
 					
 					createAndSendPacketWithResendTimer(mySocket,SYNACK, 0, 0, windowsize, NULL, &otherAddress, &timerList, deltaTime);
@@ -167,7 +167,7 @@ int main() {
 									printf(ANSI_WHITE"FRAME_RECEIVED GOING TO WAIT - FRAME BROKEN SENDING NACK\n"ANSI_RESET);
 									state = WAIT;
 								}
-								else if (((slidingWindowIndexFirst <= slidingWindowIndexLast) && (packet.seq >= slidingWindowIndexFirst) && (packet.seq <= slidingWindowIndexLast)) || ((slidingWindowIndexFirst > slidingWindowIndexLast && (packet.seq >= slidingWindowIndexFirst && packet.seq <= maxSequence-1)) || (packet.seq <= slidingWindowIndexLast && packet.seq >= 0))) {
+								else if (((slidingWindowIndexFirst <= slidingWindowIndexLast) && (packet.seq >= slidingWindowIndexFirst) && (packet.seq <= slidingWindowIndexLast)) || (slidingWindowIndexFirst > slidingWindowIndexLast && ((packet.seq >= slidingWindowIndexFirst && packet.seq <= maxSequence-1) || (packet.seq <= slidingWindowIndexLast && packet.seq >= 0)))) {
 									// INSIDE WINDOW
 									removePacketTimerBySeq(&timerList, packet.seq);
 									printf(ANSI_WHITE"FRAME_RECEIVED GOING TO FRAME_IN_WINDOW\n"ANSI_RESET);
@@ -188,14 +188,14 @@ int main() {
 								else{
 									if (!isAlreadyBuffered(windowBuffer, windowsize-1, packet.seq)) {
 										for(int i = 0; i < windowsize-1;i++){
-											if(windowBuffer[i].seq==-1 || windowBuffer[i].seq == packet.seq){
+											if(windowBuffer[i].seq==-1){
 												windowBuffer[i]=packet;
 												printf(ANSI_WHITE"FRAME_IN_WINDOW GOING TO BUFFER - FRAME IS NOT FIRST\n"ANSI_RESET);
 												break;
 											}
 										}
 									}
-									state = BUFFER;
+									state = WAIT;
 								}
 								createAndSendPacket(mySocket, ACK, 0, packet.seq, windowsize, NULL, &otherAddress);
 								
@@ -221,6 +221,7 @@ int main() {
 									if(windowBuffer[i].seq == slidingWindowIndexFirst){
 										state = MOVE_WINDOW;
 										packet = windowBuffer[i];
+										printf(ANSI_WHITE"BUFFER GOING TO MOVE_WINDOW\n"ANSI_RESET);
 										windowBuffer[i].seq = -1;
 										break;
 									}
@@ -242,6 +243,7 @@ int main() {
 					printf(ANSI_WHITE"DATA RECEIVE STATE GOING TO CLOSE_WAIT\n"ANSI_RESET);
 					state = CLOSE_WAIT;
 					printf(" - - - - %s - - - -\n", finalBuffer);
+					printf("! ! ! %d ! ! !\n", maxSequence);
 					free(finalBuffer);
 					resendCount = 0;
 					finalBuffer = NULL;
@@ -251,7 +253,7 @@ int main() {
 			//TEARDOWN
 		
 			case CLOSE_WAIT:
-				createAndSendPacketWithResendTimer(mySocket, FIN, 0, 0, windowsize, NULL, &otherAddress, &timerList, deltaTime);
+				createAndSendPacketWithResendTimer(mySocket, FIN, 0, packet.seq, windowsize, NULL, &otherAddress, &timerList, deltaTime);
 				/*createPacket(&packet, FIN, 0, packet.seq, windowsize, NULL);
 				sendPacket(mySocket, &packet, &otherAddress, 0);
 				addPacketTimer(&timerList, &packet, &otherAddress, deltaTime);*/
