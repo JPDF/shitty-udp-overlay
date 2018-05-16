@@ -14,10 +14,11 @@
 #define HEARTBEAT_TIMEOUT 1
 #define TIMEOUT 1000 // The time before timeout on each packet in milliseconds
 #define MAX_RESENDS 10
-#define MAX_SEQUENCE 10
+#define MAX_SEQUENCE 8
 #define MAX_WINDOWSIZE MAX_SEQUENCE / 2
 #define ACK_SENT_TIMEOUT 5000
 #define FIN_WAIT_2_TIMEOUT ACK_SENT_TIMEOUT
+#define WAIT_TIMEOUT 10000
 
 // STATES
 #define CLOSED 0
@@ -69,6 +70,7 @@ int isAlreadyBuffered(int *buffer, int size, int seq) {
 
 
 int main(int argc, char **argv) {
+	int maxSequence = MAX_SEQUENCE;
 	int state = CLOSED, receiveStatus, on = 1, currentSeq = 0, buffersize = 0, i;
 	int slidingWindowIndexFirst = 0, slidingWindowIndexLast = 0;
 	struct packet packet;
@@ -104,6 +106,8 @@ int main(int argc, char **argv) {
 	
 		switch (state) {
 			case CLOSED:
+				maxSequence=MAX_SEQUENCE;
+				windowsize = MAX_WINDOWSIZE;
 				state = MESSAGE_MENU;
 				for (i = 0; i < dataCount; i++) {
 					if (data[i] != NULL)
@@ -148,8 +152,10 @@ int main(int argc, char **argv) {
 					windowsize = packet.windowsize;
 					slidingWindowIndexLast = packet.windowsize-1;
 					buffersize = windowsize - 1;
+					maxSequence = packet.windowsize*2;
 					windowBuffer = malloc(sizeof(int) * (windowsize - 1));
-					memset(windowBuffer, -1, sizeof(*windowBuffer));
+					for (i = 0; i < buffersize; i++)
+						windowBuffer[i] = -1;
 					if (windowBuffer == NULL)
 						fatalerror("Failed to malloc window buffer");
 					createAndSendPacket(mySocket, ACK, 0, seq, windowsize, NULL, &otherAddress);
@@ -166,7 +172,6 @@ int main(int argc, char **argv) {
 			case ACK_SENT:
 				if (receiveStatus == RECEIVE_OK && packet.flags == SYNACK) {
 					resendCount++;
-					
 					createAndSendPacket(mySocket, ACK, 0, 0, windowsize, NULL, &otherAddress);
 				}
 				else if(resendCount >= MAX_RESENDS){
@@ -177,6 +182,7 @@ int main(int argc, char **argv) {
 				else if (deltaTime - tTimeout > ACK_SENT_TIMEOUT) { // TIMEOUT!
 					resendCount = 0;
 					printf("TIMEOUT in ACK_SENT going to WAIT\n");
+					tTimeout=deltaTime;
 	 				state = WAIT;
 				}
 			
@@ -193,22 +199,24 @@ int main(int argc, char **argv) {
 					currentSeq = 0;
 					slidingWindowIndexFirst = 0;
 				}
-				else if (dataIndex != dataCount && currentSeq != (slidingWindowIndexLast + 1) % MAX_SEQUENCE) { // SEND DATA
+				else if (dataIndex != dataCount && currentSeq != (slidingWindowIndexLast + 1) % maxSequence) { // SEND DATA
 					createAndSendPacketWithResendTimer(mySocket, FRAME, 0, currentSeq, windowsize, data[dataIndex], &otherAddress, &timerList, deltaTime);					
 					
-					currentSeq = (currentSeq + 1) % MAX_SEQUENCE;
+					currentSeq = (currentSeq + 1) % maxSequence;
 					dataIndex++;
 				}
-				else if (resendCount >= MAX_RESENDS) {
+				else if (deltaTime - tTimeout > WAIT_TIMEOUT) {
 					createAndSendPacketWithResendTimer(mySocket, FIN, 0, currentSeq, windowsize, NULL, &otherAddress, &timerList, deltaTime);
 					printf(ANSI_WHITE"WAIT GOING TO FIN_WAIT_1 - NO RESPONSE FROM SERVER"ANSI_RESET);
 					state = FIN_WAIT_1;
 				}
 				
-				if (packet.flags == NACK) {
+				if (receiveStatus == RECEIVE_OK && packet.flags == NACK) {
+					tTimeout=deltaTime;
 					resendPacketBySeq(mySocket, &timerList, deltaTime, packet.seq);
 				}
 				else if(receiveStatus == RECEIVE_OK && packet.flags == ACK) {
+					tTimeout=deltaTime;
 					printf(ANSI_WHITE"WAIT GOING TO FRAME_RECEIVED\n"ANSI_RESET);
 					state = ACK_RECEIVED;
 				
@@ -217,7 +225,7 @@ int main(int argc, char **argv) {
 							case ACK_RECEIVED:
 								resendCount = 0;
 								if (((slidingWindowIndexFirst <= slidingWindowIndexLast) && (packet.seq >= slidingWindowIndexFirst) && (packet.seq <= slidingWindowIndexLast)) ||
-										((slidingWindowIndexFirst > slidingWindowIndexLast && (packet.seq >= slidingWindowIndexFirst && packet.seq <= MAX_SEQUENCE-1)) || (packet.seq <= slidingWindowIndexLast && packet.seq >= 0))) {
+										((slidingWindowIndexFirst > slidingWindowIndexLast && (packet.seq >= slidingWindowIndexFirst && packet.seq <= maxSequence-1)) || (packet.seq <= slidingWindowIndexLast && packet.seq >= 0))) {
 									// INSIDE WINDOW
 									removePacketTimerBySeq(&timerList, packet.seq);
 									printf(ANSI_WHITE"ACK_RECEIVED GOING TO ACK_IN_WINDOW\n"ANSI_RESET);
@@ -230,16 +238,17 @@ int main(int argc, char **argv) {
 								}
 								break;
 							case ACK_IN_WINDOW:
-								acksReceived++;
 								removePacketTimerBySeq(&timerList, packet.seq);
 								if (packet.seq == slidingWindowIndexFirst) {
 									printf(ANSI_WHITE"ACK_IN_WINDOW GOING TO MOVE_WINDOW - ACK IS FIRST\n"ANSI_RESET);
 									state = MOVE_WINDOW;
+									acksReceived++;
 								}
 								else {
 									if (!isAlreadyBuffered(windowBuffer, buffersize, packet.seq)) {
 										for (i = 0; i < buffersize; i++) {
 											if (windowBuffer[i] == -1 || windowBuffer[i] == packet.seq) {
+												acksReceived++;
 												windowBuffer[i] = packet.seq;
 												printf(ANSI_WHITE"ACK NOT FIRST PUT IN WINDOW BUFFER AT %d\n" ANSI_RESET, i);
 												break;
@@ -251,8 +260,8 @@ int main(int argc, char **argv) {
 								break;
 							
 							case MOVE_WINDOW:
-								slidingWindowIndexFirst = (slidingWindowIndexFirst+1)%MAX_SEQUENCE;
-								slidingWindowIndexLast = (slidingWindowIndexLast+1)%MAX_SEQUENCE;
+								slidingWindowIndexFirst = (slidingWindowIndexFirst+1)%maxSequence;
+								slidingWindowIndexLast = (slidingWindowIndexLast+1)%maxSequence;
 								printf(ANSI_WHITE"MOVE_WINDOW GOING TO BUFFER\n"ANSI_RESET);
 								state = BUFFER;
 								break;
@@ -329,7 +338,7 @@ int main(int argc, char **argv) {
 				break;
 			case TIME_WAIT:
 				if(deltaTime - tTimeout > FIN_WAIT_2_TIMEOUT) {
-					printf("TIME_WAIT GOING TO CLOSED\n");
+					printf(ANSI_WHITE"TIME_WAIT GOING TO CLOSED\n"ANSI_RESET);
 					resendCount = 0;
 					state = CLOSED;
 				}
