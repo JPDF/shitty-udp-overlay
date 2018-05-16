@@ -29,7 +29,7 @@
 #define CLOSE_WAIT 20
 #define LAST_ACK 21
 //SLIDING WINDOW SIZE
-#define MAX_SEQUENCE 2
+#define MAX_SEQUENCE 10
 #define WINDOW_SIZE MAX_SEQUENCE/2
 
 int makeSocket(int port) {
@@ -104,7 +104,7 @@ int main() {
 					state = INIT;
 					printf(ANSI_WHITE"CONNECTION TIMEOUT GOING TO CLOSED\n"ANSI_RESET);
 				}
-				else if (packet.flags == ACK){
+				else if (receiveStatus == RECEIVE_OK && packet.flags == ACK){
 					removePacketTimerBySeq(&timerList, packet.seq);
 					if((windowBuffer=malloc(sizeof(struct packet)*(windowsize-1))) == NULL)
 						fatalerror("malloc of windowBuffer failed");
@@ -131,7 +131,8 @@ int main() {
 					resendCount = 0;
 					finalBuffer = NULL;
 				}
-				else if(receiveStatus == RECEIVE_OK && packet.flags == FRAME){
+				else if(receiveStatus != RECEIVE_TIMEOUT && packet.flags == FRAME){
+					tTimeout = deltaTime;
 					printf(ANSI_WHITE"WAIT GOING TO FRAME_RECEIVED\n"ANSI_RESET);
 					state = FRAME_RECEIVED;
 					while(state != WAIT){
@@ -179,14 +180,16 @@ int main() {
 								}
 								else{
 									for(int i = 0; i < windowsize-1;i++){
-										if(windowBuffer[i].seq==-1){
+										if(windowBuffer[i].seq==-1 && windowBuffer[i].seq != packet.seq){
 											windowBuffer[i]=packet;
+											printf(ANSI_WHITE"FRAME_IN_WINDOW GOING TO BUFFER - FRAME IS NOT FIRST");
 											state = BUFFER;
 											break;
 										}
 									}
 								}
 								createAndSendPacket(mySocket, ACK, 0, packet.seq, windowsize, NULL, &otherAddress);
+								
 								/*createPacket(&packet, ACK, 0, packet.seq, windowsize, NULL);
 								sendPacket(mySocket, &packet, &otherAddress, 0);*/
 								break;
@@ -262,7 +265,7 @@ int main() {
 					state = INIT;
 					printf(ANSI_WHITE "MAX RESENDS REACHED - LAST_ACK GOING TO CLOSED\n"ANSI_RESET);
 				}
-				else if (packet.flags == ACK){
+				else if (receiveStatus == RECEIVE_OK && packet.flags == ACK){
 					removePacketTimerBySeq(&timerList, packet.seq);
 					resendCount = 0;
 					state = INIT;
