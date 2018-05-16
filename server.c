@@ -104,7 +104,7 @@ int main() {
 					state = INIT;
 					printf(ANSI_WHITE"CONNECTION TIMEOUT GOING TO CLOSED\n"ANSI_RESET);
 				}
-				else if (packet.flags == ACK){
+				else if (receiveStatus == RECEIVE_OK && packet.flags == ACK){
 					removePacketTimerBySeq(&timerList, packet.seq);
 					if((windowBuffer=malloc(sizeof(struct packet)*(windowsize-1))) == NULL)
 						fatalerror("malloc of windowBuffer failed");
@@ -131,7 +131,8 @@ int main() {
 					resendCount = 0;
 					finalBuffer = NULL;
 				}
-				else if(receiveStatus == RECEIVE_OK && packet.flags == FRAME){
+				else if(receiveStatus != RECEIVE_TIMEOUT && packet.flags == FRAME){
+					tTimeout = deltaTime;
 					printf(ANSI_WHITE"WAIT GOING TO FRAME_RECEIVED\n"ANSI_RESET);
 					state = FRAME_RECEIVED;
 					while(state != WAIT){
@@ -262,7 +263,7 @@ int main() {
 					state = INIT;
 					printf(ANSI_WHITE "MAX RESENDS REACHED - LAST_ACK GOING TO CLOSED\n"ANSI_RESET);
 				}
-				else if (packet.flags == ACK){
+				else if (receiveStatus == RECEIVE_OK && packet.flags == ACK){
 					removePacketTimerBySeq(&timerList, packet.seq);
 					resendCount = 0;
 					state = INIT;
