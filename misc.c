@@ -1,3 +1,4 @@
+// MADE BY: Patrik, Jakob, Simon
 #include "misc.h"
 #include <stdlib.h>
 

@@ -1,3 +1,4 @@
+// MADE BY: Patrik, Jakob, Simon
 #include "packet.h"
 #include <netinet/in.h>
 #include <stdlib.h>

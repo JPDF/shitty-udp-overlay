@@ -1,3 +1,4 @@
+// MADE BY: Patrik, Jakob, Simon
 #ifndef PACKET_H
 #define PACKET_H
 
