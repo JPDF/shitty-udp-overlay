@@ -18,10 +18,7 @@
 #define RECEIVE_OK 1
 #define RECEIVE_TIMEOUT 0
 #define RECEIVE_BROKEN -1
-<<<<<<< HEAD
 
-=======
->>>>>>> 629d959926a9f3117fac2fa12b58da077ec44dfb
 #define DATA_LENGHT 1
 
 #define ERROR_LOST_FRAME 1

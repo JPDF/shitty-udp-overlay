@@ -256,6 +256,7 @@ int main(int argc, char **argv) {
 										state = MOVE_WINDOW;
 										break;
 									}
+									
 								}
 								if (state != MOVE_WINDOW) {
 									state = WAIT;

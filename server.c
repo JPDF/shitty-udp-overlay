@@ -145,32 +145,18 @@ int main() {
 									printf(ANSI_WHITE"FRAME_RECEIVED GOING TO WAIT - FRAME BROKEN SENDING NACK\n"ANSI_RESET);
 									state = WAIT;
 								}
-								else if (slidingWindowIndexFirst <= slidingWindowIndexLast){
-									if(packet.seq >= slidingWindowIndexFirst && packet.seq <= slidingWindowIndexLast){
-										printf(ANSI_WHITE"FRAME_RECEIVED GOING TO FRAME_IN_WINDOW\n"ANSI_RESET);
-										state = FRAME_IN_WINDOW;
-									}
-									else{
-										createAndSendPacket(mySocket, ACK, 0, packet.seq, windowsize, NULL, &otherAddress);
-										/*createPacket(&packet, ACK, 0, packet.seq, windowsize, NULL);
-										sendPacket(mySocket, &packet, &otherAddress, 0);*/
-										printf(ANSI_WHITE"FRAME_RECEIVED GOING TO WAIT - FRAME OUTSIDE WINDOW\n"ANSI_RESET);
-										state = WAIT;
-									}
+								else if (((slidingWindowIndexFirst <= slidingWindowIndexLast) && (packet.seq >= slidingWindowIndexFirst) && (packet.seq <= slidingWindowIndexLast)) ||
+										((slidingWindowIndexFirst > slidingWindowIndexLast && (packet.seq >= slidingWindowIndexFirst && packet.seq <= MAX_SEQUENCE-1)) || (packet.seq <= slidingWindowIndexLast && packet.seq >= 0))) {
+									// INSIDE WINDOW
+									removePacketTimerBySeq(&timerList, packet.seq);
+									printf(ANSI_WHITE"FRAME_RECEIVED GOING TO FRAME_IN_WINDOW\n"ANSI_RESET);
+									state = FRAME_IN_WINDOW;
 								}
-								else if (slidingWindowIndexFirst > slidingWindowIndexLast){
-									if((packet.seq >= slidingWindowIndexFirst && packet.seq <= MAX_SEQUENCE-1) || (packet.seq <= slidingWindowIndexLast && packet.seq >= 0)){
-										printf(ANSI_WHITE"FRAME_RECEIVED GOING TO FRAME_IN_WINDOW\n"ANSI_RESET);
-										state = FRAME_IN_WINDOW;
-									}
-									else{
-										createAndSendPacket(mySocket, ACK, 0, packet.seq, windowsize, NULL, &otherAddress);
-										/*createPacket(&packet, ACK, 0, packet.seq, windowsize, NULL);
-										sendPacket(mySocket, &packet, &otherAddress, 0);*/
-										printf(ANSI_WHITE"FRAME_RECEIVED GOING TO WAIT - FRAME OUTSIDE WINDOW\n"ANSI_RESET);
-										printf(ANSI_GREEN"OUT D ACK sent to "ANSI_BLUE"%s"ANSI_GREEN":"ANSI_BLUE"%d\n"ANSI_RESET, inet_ntoa(otherAddress.sin_addr), ntohs(otherAddress.sin_port));
-										state = WAIT;
-									}
+								else {
+									// OUTSIDE WINDOW
+									createAndSendPacket(mySocket, ACK, 0, packet.seq, windowsize, NULL, &otherAddress);
+									printf(ANSI_WHITE"FRAME_RECEIVED GOING TO WAIT - FRAME OUTSIDE WINDOW\n"ANSI_RESET);
+									state = WAIT;
 								}
 								break;
 							case FRAME_IN_WINDOW:
@@ -183,10 +169,10 @@ int main() {
 										if(windowBuffer[i].seq==-1 && windowBuffer[i].seq != packet.seq){
 											windowBuffer[i]=packet;
 											printf(ANSI_WHITE"FRAME_IN_WINDOW GOING TO BUFFER - FRAME IS NOT FIRST");
-											state = BUFFER;
 											break;
 										}
 									}
+									state = BUFFER;
 								}
 								createAndSendPacket(mySocket, ACK, 0, packet.seq, windowsize, NULL, &otherAddress);
 								
