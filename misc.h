@@ -13,6 +13,7 @@
 #define ANSI_MAGENTA "\x1b[1;35m"
 #define ANSI_CYAN    "\x1b[1;36m"
 #define ANSI_RESET   "\x1b[0m"
+#define clear() printf("\033[H\033[J")
 
 struct client {
 	int id;

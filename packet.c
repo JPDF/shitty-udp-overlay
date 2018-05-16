@@ -39,7 +39,7 @@ void createPacket(struct packet *packet, int flags, int id, int seq, int windows
 	packet->crc = 0;
 	packet->data[0] = '\0';
 	if (data != NULL)
-		strcpy(packet->data, data);
+		strncpy(packet->data, data, DATA_LENGHT);
 	packet->crc = crc32(packet, sizeof(*packet));
 }
 
@@ -78,8 +78,18 @@ int receivePacket(const int mySocket, struct packet *packet, struct sockaddr_in 
 	return RECEIVE_OK;
 }
 
-void sendPacket(const int mySocket, const struct packet *packet, const struct sockaddr_in *destination, int isResend) {
-	int chance = 1;//rand()%2;
+void sendPacket(const int mySocket, struct packet *packet, const struct sockaddr_in *destination, int isResend) {
+	int chance = 1, throwAway = 0;
+	if (error != 0) {
+		chance = rand() % 3;
+		if ((error == ERROR_CRC || error == ERROR_CHAOS) && chance == 2) {
+			packet->crc = 1;
+			printf(ANSI_RED"POSTNORD RUINED PACKET\n"ANSI_RESET);
+		}
+		else if ((error == ERROR_LOST_FRAME || error == ERROR_CHAOS) && chance == 1) {
+			throwAway = 1;
+		}
+	}
 	
 	if (isResend)
 		printf(ANSI_YELLOW"RESENT: ");
@@ -94,7 +104,7 @@ void sendPacket(const int mySocket, const struct packet *packet, const struct so
 				 inet_ntoa(destination->sin_addr),
 				 ntohs(destination->sin_port));
 	
-	if (chance == 1) {
+	if (!throwAway) {
 		if (sendto(mySocket, packet, sizeof(*packet), 0, (struct sockaddr*)destination, sizeof(*destination)) == -1)
 			fatalerror("Failed to send");
 	}

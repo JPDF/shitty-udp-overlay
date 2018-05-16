@@ -18,6 +18,11 @@
 #define RECEIVE_OK 1
 #define RECEIVE_TIMEOUT 0
 #define RECEIVE_BROKEN -1
+#define DATA_LENGHT 10
+
+#define ERROR_LOST_FRAME 1
+#define ERROR_CRC 2
+#define ERROR_CHAOS 3
 
 #define CRC_POLYNOM 0x04c11db7
 
@@ -27,7 +32,7 @@ struct packet{
 	int seq;
 	int windowsize;
 	int crc;
-	char data[10];
+	char data[DATA_LENGHT];
 };
 
 struct packetTimer {
@@ -38,6 +43,8 @@ struct packetTimer {
 	struct packetTimer *next;
 };
 typedef struct packetTimer *TimerList;
+
+int error;
 
 // Creating a packet and returning it...
 void createPacket(struct packet *packet, int flags, int id, int seq, int windowsize, char *data);
@@ -58,7 +65,7 @@ int receivePacket(const int mySocket, struct packet *packet, struct sockaddr_in 
  *	packet: The packet to send
  *	destination: The destination to send the packet
  * Returns -1 on error, 0 on timeout or amounts of bytes read */
-void sendPacket(const int mySocket, const struct packet *packet, const struct sockaddr_in *destination, int isResend);
+void sendPacket(const int mySocket, struct packet *packet, const struct sockaddr_in *destination, int isResend);
 void createAndSendPacket(int mySocket, int flags, int id, int seq, int windowsize, char *data, const struct sockaddr_in *destination);
 void createAndSendPacketWithResendTimer(int mySocket, int flags, int id, int seq, int windowsize, char *data, const struct sockaddr_in *destination, TimerList *list, time_t time);
 

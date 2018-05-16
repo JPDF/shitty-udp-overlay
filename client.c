@@ -6,6 +6,7 @@
 #include <sys/types.h>
 #include <time.h>
 #include <string.h>
+#include <math.h>
 #include "packet.h"
 #include "misc.h"
 
@@ -25,10 +26,11 @@
 #define SYN_SENT 1
 #define ACK_SENT 2
 // MENU STATES
-#define MENU 100
-#define LOST_FRAMES 101
-#define WRONG_ORDER 102
-#define BROKEN_CRC 103
+#define MESSAGE_MENU 100
+#define ERROR_MENU 101
+#define LOST_FRAMES 102
+#define WRONG_ORDER 103
+#define BROKEN_CRC 104
 // SLIDING WINDOW STATES
 #define WAIT 10
 #define ACK_RECEIVED 11
@@ -40,6 +42,19 @@
 #define FIN_WAIT_2 21
 #define CLOSING 22
 #define TIME_WAIT 23
+
+
+void hackAndSlashMessage(char *message, char **data, int *dataLength){
+	int len = strlen(message); //+1?
+	int i;
+	*dataLength = ceil(len/DATA_LENGHT);
+	data = malloc(*dataLength);
+	for(i = 0; i < *dataLength ; i++){
+		data[i] = &message[DATA_LENGHT*i];
+	}
+}
+
+
 
 
 
@@ -54,13 +69,11 @@ int main(int argc, char **argv) {
 	struct timespec start, stop;
 	time_t deltaTime = 0, tTimeout = 0;
 	int *windowBuffer;
-	int menuChoise;
+	int errorChoice;
+	char message[101];
 	
-	char *data[MAX_DATA] = {
-		"j",
-		"h",
-		"s"
-	};
+	char **data = NULL;
+	int dataCount;
 	
 	if (argc < 3)
 		fatalerror("Too few arguments");
@@ -81,25 +94,34 @@ int main(int argc, char **argv) {
 	
 		switch (state) {
 			case CLOSED:
-			state = MENU;
-				while (state != CLOSED)
+			if (data != NULL) {
+				free(data);
+				data = NULL;
+			}
+			state = MESSAGE_MENU;
+				while (state != CLOSED){
 					switch (state){
-						case (MENU):
-							printf("How do you want to mess up?\n1. Lost frames\n2. Frames sent in the wrong order\n3. Broken crc\n");
-							scanf("%d", &menuChoise);
-							switch (menuChoise){
-								case (1):
-									state = CLOSED;
-									break;
-								case (2):
-								
-								case (3):
-								default:
-									printf("User selected fucket up");
-									break;
-							}
+						case (MESSAGE_MENU):
+							clear();
+							printf("Type a message to send up to 100 characters long\n");
+							if(fgets(message, 101, stdin)!=NULL)
+								clear();
+								state = ERROR_MENU;
 							break;
-						}
+							
+						case (ERROR_MENU):
+							printf("How do you want to mess up?\n0. Everything like heaven\n1. Lost frames\n2. Broken crc\n3. CHAOS!!1!!\n");
+							scanf("%d", &errorChoice);
+							clear();
+							if(errorChoice >= 0 && errorChoice <= 3)
+								state = CLOSED;
+							else
+								printf("User selected fucket up\n");
+							break;
+					}
+					error = errorChoice;
+				}
+				hackAndSlashMessage(message, data, &dataCount);
 				createAndSendPacketWithResendTimer(mySocket, SYN, 0, seq, windowsize, NULL, &otherAddress, &timerList, deltaTime);
 				state = SYN_SENT;
 				break;
@@ -145,7 +167,6 @@ int main(int argc, char **argv) {
 				break;
 			case WAIT:
 				if (dataIndex == MAX_DATA && acksReceived == MAX_DATA) {
-					
 					createAndSendPacketWithResendTimer(mySocket, FIN, 0, currentSeq, windowsize, NULL, &otherAddress, &timerList, deltaTime);
 					printf(ANSI_WHITE"WAIT GOING TO FIN_WAIT_1\n"ANSI_RESET);
 					state = FIN_WAIT_1;
@@ -156,9 +177,8 @@ int main(int argc, char **argv) {
 					currentSeq = 0;
 					slidingWindowIndexFirst = 0;
 				}
-				else if (dataIndex != MAX_DATA && currentSeq != (slidingWindowIndexLast + 1) % MAX_SEQUENCE) { // SEND DATA
+				else if (dataIndex != dataCount && currentSeq != (slidingWindowIndexLast + 1) % MAX_SEQUENCE) { // SEND DATA
 					createAndSendPacketWithResendTimer(mySocket, FRAME, 0, currentSeq, windowsize, data[dataIndex], &otherAddress, &timerList, deltaTime);					
-					
 					currentSeq = (currentSeq + 1) % MAX_SEQUENCE;
 					dataIndex++;
 				}
