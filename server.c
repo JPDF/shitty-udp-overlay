@@ -30,7 +30,7 @@
 #define CLOSE_WAIT 20
 #define LAST_ACK 21
 //SLIDING WINDOW SIZE
-#define MAX_SEQUENCE 10
+#define MAX_SEQUENCE 20
 #define WINDOW_SIZE (MAX_SEQUENCE/2)
 
 /* Creates a socket with specific port and binds it
@@ -259,8 +259,7 @@ int main() {
 					printf(ANSI_WHITE"DATA RECEIVE STATE GOING TO CLOSE_WAIT\n"ANSI_RESET);
 					state = CLOSE_WAIT;
 					// Prints the result
-					printf(" - - - - %s - - - -\n", finalBuffer);
-					printf("! ! ! %d ! ! !\n", maxSequence);
+					printf(" - - - -[%s]- - - -\n", finalBuffer);
 					
 					// Free all used buffer and reset variables
 					free(finalBuffer);
