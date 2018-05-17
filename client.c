@@ -16,6 +16,7 @@
 #define MAX_RESENDS 10
 #define MAX_SEQUENCE 8
 #define MAX_WINDOWSIZE MAX_SEQUENCE / 2
+//Timeouts for different cases
 #define ACK_SENT_TIMEOUT 5000
 #define FIN_WAIT_2_TIMEOUT ACK_SENT_TIMEOUT
 #define WAIT_TIMEOUT 10000
@@ -96,18 +97,22 @@ int main(int argc, char **argv) {
 	char *data[(int)ceil((float)MAX_MESSAGE/(float)DATA_LENGHT)];
 	int dataCount = 0;
 	
+	//Gives an error if you input to few arguments when makeing the ./client IP PORT call
 	if (argc < 3)
 		fatalerror("Too few arguments");
 	otherAddress.sin_family = AF_INET;
 	otherAddress.sin_addr.s_addr = inet_addr(argv[1]);
 	otherAddress.sin_port = htons(atoi(argv[2]));
+	
 	// Socket creation...
 	int mySocket = socket(PF_INET, SOCK_DGRAM, 0);
 	if (mySocket == -1)
 		fatalerror("Failed to create a socket");
-		
+	
+	//sets socket to allow broadcasts
 	setsockopt(mySocket, SOL_SOCKET, SO_BROADCAST, &on, sizeof(on));
 	
+	//starts the count for the clock used in timeouts
 	clock_gettime(CLOCK_MONOTONIC, &start);
 
 	// Event handling loop
@@ -115,9 +120,11 @@ int main(int argc, char **argv) {
 	
 		switch (state) {
 			case CLOSED:
+				//sets the initial values used in #DEFINE 
 				maxSequence=MAX_SEQUENCE;
 				windowsize = MAX_WINDOWSIZE;
 				state = MESSAGE_MENU;
+				//clears the hackAndSlashMessage function buffer
 				for (i = 0; i < dataCount; i++) {
 					if (data[i] != NULL)
 						free(data[i]);
@@ -125,19 +132,18 @@ int main(int argc, char **argv) {
 				while (state != CLOSED){
 					switch (state){
 						case (MESSAGE_MENU):
-							//clear();
+							//Lets the user input a message to send to the server
 							printf("\n\n\nType a message to send up to 100 characters long\n");
 							if(fgets(message, 101, stdin)!=NULL) {
-								//clear();
 								state = ERROR_MENU;
 								message[strlen(message) - 1] = '\0';
 							}
 							break;
 							
 						case (ERROR_MENU):
+							//Menu for the user to choose what error he wants to happen
 							printf("How do you want to mess up?\n0. Everything like heaven\n1. Lost frames\n2. Broken crc\n3. CHAOS!!1!!\n");
 							scanf("%d%*c", &error);
-							//clear();
 							if(error >= 0 && error <= 3)
 								state = CLOSED;
 							else
@@ -145,31 +151,37 @@ int main(int argc, char **argv) {
 							break;
 					}
 				}
+				//takes length of the message and divides it by the allowed maximum characters to be sent at a time I.E 10 characters entered and 1 per frame = 10 frames to be sent
 				dataCount = ceil((float)strlen(message)/(float)(DATA_LENGHT));
 				hackAndSlashMessage(message, data, dataCount);
 				clock_gettime(CLOCK_MONOTONIC, &stop);
+				//resets the clock
 				deltaTime = (stop.tv_sec * 1000 + stop.tv_nsec / 1000000) - (start.tv_sec * 1000 + start.tv_nsec / 1000000);
+				//sends initial SYN to the server
 				createAndSendPacketWithResendTimer(mySocket, SYN, 0, seq, windowsize, NULL, &otherAddress, &timerList, deltaTime);
 				state = SYN_SENT;
 				break;
 			case SYN_SENT:
 				if (packet.flags == SYNACK) {
 					removePacketTimerBySeq(&timerList, packet.seq);
-					
-					// saving settings from server
+					// saving settings from server to our local variables
 					windowsize = packet.windowsize;
 					slidingWindowIndexLast = packet.windowsize-1;
 					buffersize = windowsize - 1;
 					maxSequence = packet.windowsize*2;
-					printf("%d\n", maxSequence);
+					//dynamic memory allocation for the buffer
 					windowBuffer = malloc(sizeof(int) * (windowsize - 1));
+					//fills the buffer with '-1' that indicates in our code that the slot is empty
 					for (i = 0; i < buffersize; i++)
 						windowBuffer[i] = -1;
 					if (windowBuffer == NULL)
 						fatalerror("Failed to malloc window buffer");
+					//Sends ACK that we have agreed to the servers SYN and that we will use that windowsize and maxsequence
 					createAndSendPacket(mySocket, ACK, 0, seq, windowsize, NULL, &otherAddress);
 					state = ACK_SENT;
+					//resets the timeout because we received a SYNACK
 					tTimeout = deltaTime;
+					//reset the maximum resend counter
 					resendCount = 0;
 				}
 				else if (resendCount >= MAX_RESENDS) {
@@ -178,17 +190,21 @@ int main(int argc, char **argv) {
 					printf(ANSI_WHITE"SYN_SENT GOING TO CLOSED - MAX RESENDS REACHED (SYN)"ANSI_RESET "\n");
 				}
 				break;
+				
 			case ACK_SENT:
+				//checks if the select function returned a OK state and if the flag is SYNACK
 				if (receiveStatus == RECEIVE_OK && packet.flags == SYNACK) {
 					tTimeout = deltaTime;
 					resendCount++;
 					createAndSendPacket(mySocket, ACK, 0, 0, windowsize, NULL, &otherAddress);
 				}
+				//checks if we have reached the maximum allowed of resent ACKS
 				else if(resendCount >= MAX_RESENDS){
 					resendCount = 0;
 					printf("MAX resends reached going to CLOSED");
 					state = CLOSED;
 				}
+				//checkes if we have reached the maximum allowed inactive time (we havent received anything from the server)
 				else if (deltaTime - tTimeout > ACK_SENT_TIMEOUT) { // TIMEOUT!
 					resendCount = 0;
 					printf("TIMEOUT in ACK_SENT going to WAIT\n");
@@ -198,6 +214,7 @@ int main(int argc, char **argv) {
 			
 				break;
 			case WAIT:
+				//checks if we have sent all frames and received all expected ACKS from the server
 				if (dataIndex == dataCount && acksReceived == dataCount) {
 					createAndSendPacketWithResendTimer(mySocket, FIN, 0, currentSeq, windowsize, NULL, &otherAddress, &timerList, deltaTime);
 					printf(ANSI_WHITE"WAIT GOING TO FIN_WAIT_1\n"ANSI_RESET);
@@ -209,23 +226,25 @@ int main(int argc, char **argv) {
 					currentSeq = 0;
 					slidingWindowIndexFirst = 0;
 				}
+				//Sends FRAMES when there is still data to send and that we are on or under the last pointer for the slidingwindowbuffer
 				else if (dataIndex != dataCount && currentSeq != (slidingWindowIndexLast + 1) % maxSequence) { // SEND DATA
 					createAndSendPacketWithResendTimer(mySocket, FRAME, 0, currentSeq, windowsize, data[dataIndex], &otherAddress, &timerList, deltaTime);					
-					
 					currentSeq = (currentSeq + 1) % maxSequence;
 					dataIndex++;
 				}
+				//checks if we have reached the maximum allowed inactive time ( we hacent received anything from the server)
 				else if (deltaTime - tTimeout > WAIT_TIMEOUT) {
 					removeAllFromTimerList(&timerList);
 					createAndSendPacketWithResendTimer(mySocket, FIN, 0, currentSeq, windowsize, NULL, &otherAddress, &timerList, deltaTime);
 					printf(ANSI_WHITE"WAIT GOING TO FIN_WAIT_1 - NO RESPONSE FROM SERVER"ANSI_RESET);
 					state = FIN_WAIT_1;
 				}
-				
+				//checks if select returns an OK and if the flag is set to NACK, then we resend the requested FRAME
 				if (receiveStatus == RECEIVE_OK && packet.flags == NACK) {
 					tTimeout=deltaTime;
 					resendPacketBySeq(mySocket, &timerList, deltaTime, packet.seq);
 				}
+				//checks if select returns an OK and if the flag is set to ACK, then we move to ACK_RECEIVED.
 				else if(receiveStatus == RECEIVE_OK && packet.flags == ACK) {
 					tTimeout=deltaTime;
 					printf(ANSI_WHITE"WAIT GOING TO FRAME_RECEIVED\n"ANSI_RESET);
@@ -235,6 +254,7 @@ int main(int argc, char **argv) {
 						switch (state) {
 							case ACK_RECEIVED:
 								resendCount = 0;
+								//checks if ACK is in the window
 								if (((slidingWindowIndexFirst <= slidingWindowIndexLast) && (packet.seq >= slidingWindowIndexFirst) && (packet.seq <= slidingWindowIndexLast)) ||
 										(slidingWindowIndexFirst > slidingWindowIndexLast && ((packet.seq >= slidingWindowIndexFirst && packet.seq <= maxSequence-1) || (packet.seq <= slidingWindowIndexLast && packet.seq >= 0)))) {
 									// INSIDE WINDOW
@@ -249,14 +269,18 @@ int main(int argc, char **argv) {
 								}
 								break;
 							case ACK_IN_WINDOW:
+								//remove FRAME from the resend buffer
 								removePacketTimerBySeq(&timerList, packet.seq);
+								//checks if the ACK is first
 								if (packet.seq == slidingWindowIndexFirst) {
 									printf(ANSI_WHITE"ACK_IN_WINDOW GOING TO MOVE_WINDOW - ACK IS FIRST\n"ANSI_RESET);
 									state = MOVE_WINDOW;
 									acksReceived++;
 								}
 								else {
+									//checks if the ACK is already buffered or not
 									if (!isAlreadyBuffered(windowBuffer, buffersize, packet.seq)) {
+										//if the ACK is not buffered we search for a unused spot in the buffer to store it
 										for (i = 0; i < buffersize; i++) {
 											if (windowBuffer[i] == -1 || windowBuffer[i] == packet.seq) {
 												acksReceived++;
@@ -269,14 +293,14 @@ int main(int argc, char **argv) {
 									state = WAIT;
 								}
 								break;
-							
+							//moves the first and last pointer %maxSequence make it so they start over when they go +1 from max sequence number
 							case MOVE_WINDOW:
 								slidingWindowIndexFirst = (slidingWindowIndexFirst+1)%maxSequence;
 								slidingWindowIndexLast = (slidingWindowIndexLast+1)%maxSequence;
 								printf(ANSI_WHITE"MOVE_WINDOW GOING TO BUFFER\n"ANSI_RESET);
 								state = BUFFER;
 								break;
-						
+							//Checks buffer if any ACK is the next in seq and if it is we change state to MOVE_WINDOW
 							case BUFFER:
 								for (i = 0; i < buffersize; i++) {
 									if (windowBuffer[i] == slidingWindowIndexFirst) {
@@ -287,6 +311,7 @@ int main(int argc, char **argv) {
 									}
 									
 								}
+								//When there isnt any ACKS that are now first in the buffer we return to WAIT
 								if (state != MOVE_WINDOW) {
 									state = WAIT;
 									printf(ANSI_WHITE"BUFFER GOING TO WAIT - NO ACK IN BUFFER IS FIRST IN WINDOW\n"ANSI_RESET);
@@ -296,14 +321,15 @@ int main(int argc, char **argv) {
 					}
 				}
 				break;
-				
 			case FIN_WAIT_1:
+				//Checks if we reach the maximum resends and if we have we go to CLOSED
 				if (resendCount >= MAX_RESENDS) {
 					removePacketTimerBySeq(&timerList, packet.seq);
 					resendCount = 0;
 					printf(ANSI_WHITE"FIN_WAIT_1 GOING TO CLOSED - MAX FIN SENT\n"ANSI_RESET);
 					state = CLOSED;
 				}
+				//Checks if select returns an OK and if the flag is set as ACK, then we reset the timeouttime, remove the resend from the buffer and move to FIN_WAIT_2
 				else if (receiveStatus == RECEIVE_OK && packet.flags == ACK)	{
 					removePacketTimerBySeq(&timerList, packet.seq);
 					resendCount = 0;
@@ -311,6 +337,7 @@ int main(int argc, char **argv) {
 					state = FIN_WAIT_2;
 					tTimeout = deltaTime;
 				}
+				//Checks if select return OK and flag is set to FIN, then we remove resend from the buffer and send an ACK and move to CLOSING
 				else if (receiveStatus == RECEIVE_OK && packet.flags == FIN) {
 					removePacketTimerBySeq(&timerList, packet.seq);
 					resendCount = 0;
@@ -321,10 +348,12 @@ int main(int argc, char **argv) {
 				}
 				break;
 			case FIN_WAIT_2:
+				//Checks if we have been inactive long enough (nothing received from server), then we go to CLOSED
 				if (deltaTime - tTimeout > FIN_WAIT_2_TIMEOUT) { // TIMEOUT!
 					printf(ANSI_WHITE"FIN_WAIT_2 GOING TO CLOSED\n"ANSI_RESET);
 	 				state = CLOSED;
 				}
+				//Checks if select return an OK and if flag is set to FIN, then we send an ACK and reset the timeouttime and go to TIME_WAIT
 				else if(receiveStatus == RECEIVE_OK && packet.flags == FIN) {
 					createAndSendPacket(mySocket, ACK, 0, packet.seq, windowsize, NULL, &otherAddress);
 					printf(ANSI_WHITE"FIN_WAIT_2 GOING TO TIME_WAIT\n"ANSI_RESET);
@@ -333,13 +362,15 @@ int main(int argc, char **argv) {
 				}			
 				break;
 			case CLOSING:
+				//Check if we have reached the maximum nr of resends, if we have we remove the resend from the buffer and go to CLOSED
 				if(resendCount >= MAX_RESENDS) {
 					removePacketTimerBySeq(&timerList, packet.seq);
 					resendCount = 0;
 					printf(ANSI_WHITE"CLOSING GOING TO CLOSED\n"ANSI_RESET);
 					state = CLOSED;
 				}
-				else if(packet.flags == ACK) {
+				//Checks if select return an OK and if the flag is set to ACK, then we remove the resend from the buffer, reset the timeouttime and got to TIME_WAIT
+				else if(receiveStatus == RECEIVE_OK && packet.flags == ACK) {
 					removePacketTimerBySeq(&timerList, packet.seq);
 					resendCount = 0;
 					printf(ANSI_WHITE"CLOSING GOING TO TIME_WAIT\n"ANSI_RESET);
@@ -348,6 +379,7 @@ int main(int argc, char **argv) {
 				}
 				break;
 			case TIME_WAIT:
+				//Checks if we have been inactive for x amount of time (we havent received anything from the server), and then we go to CLOSED
 				if(deltaTime - tTimeout > FIN_WAIT_2_TIMEOUT) {
 					printf(ANSI_WHITE"TIME_WAIT GOING TO CLOSED\n"ANSI_RESET);
 					resendCount = 0;
@@ -358,11 +390,12 @@ int main(int argc, char **argv) {
 				break;
 		}
 		fflush(stdout);
+		//checks what select returns, RECEIVE_OK, RECEIVE_BROKEN and RECEIVE_TIMEOUT
 		receiveStatus = receivePacketOrTimeout(mySocket, &packet, &otherAddress, HEARTBEAT_TIMEOUT);
-		
+		//Updates the clock
 		clock_gettime(CLOCK_MONOTONIC, &stop);
 		deltaTime = (stop.tv_sec * 1000 + stop.tv_nsec / 1000000) - (start.tv_sec * 1000 + start.tv_nsec / 1000000);
-
+		//Updates all timers in timerlist and resends them when they reach their timeout
 		updateTimers(mySocket, &timerList, deltaTime, &resendCount);
 	
 	}
