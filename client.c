@@ -216,6 +216,7 @@ int main(int argc, char **argv) {
 					dataIndex++;
 				}
 				else if (deltaTime - tTimeout > WAIT_TIMEOUT) {
+					removeAllFromTimerList(&timerList);
 					createAndSendPacketWithResendTimer(mySocket, FIN, 0, currentSeq, windowsize, NULL, &otherAddress, &timerList, deltaTime);
 					printf(ANSI_WHITE"WAIT GOING TO FIN_WAIT_1 - NO RESPONSE FROM SERVER"ANSI_RESET);
 					state = FIN_WAIT_1;

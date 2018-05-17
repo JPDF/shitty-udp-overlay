@@ -86,6 +86,8 @@ void removePacketTimerBySeq(TimerList *list, int seq);
 
 void resendPacketBySeq(int socket, TimerList *list, time_t time, int seq);
 
+void removeAllFromTimerList(TimerList *list);
+
 void updateTimers(int socket, TimerList *list, time_t time, int *resendCount);
 
 

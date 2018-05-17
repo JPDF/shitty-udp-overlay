@@ -188,6 +188,13 @@ void removePacketTimerBySeq(TimerList *list, int seq) {
 		removePacketTimerBySeq(&(*list)->next, seq);
 }
 
+void removeAllFromTimerList(TimerList *list) {
+	if (*list != NULL) {
+		removeAllFromTimerList(&(*list)->next);
+		removeFirstPacketTimer(list);
+	}
+}
+
 void printTimerList(TimerList list) {
 	if (list != NULL) {
 		printf(ANSI_GREEN "%s [id:"ANSI_BLUE"%d"ANSI_GREEN" seq:"ANSI_BLUE"%d"ANSI_GREEN" ws:"ANSI_BLUE"%d"ANSI_GREEN" data:"ANSI_BLUE"%s"ANSI_GREEN"] to"ANSI_BLUE" %s" ANSI_GREEN":" ANSI_BLUE"%d\n"ANSI_RESET,
