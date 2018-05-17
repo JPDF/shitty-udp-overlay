@@ -72,6 +72,7 @@ int isAlreadyBuffered(struct packet *buffer, int size, int seq) {
 
 
 int main() {
+	// INITIALIZING VARIABLES
 	int mySocket = makeSocket(PORT);
 	int state = INIT;
 	int receiveStatus;
@@ -119,8 +120,8 @@ int main() {
 						windowsize = packet.windowsize;
 						maxSequence = 2*packet.windowsize;
 					}
-					
-					createAndSendPacketWithResendTimer(mySocket,SYNACK, 0, 0, windowsize, NULL, &otherAddress, &timerList, deltaTime);
+					// Sends SYNACK with chosen settings
+					createAndSendPacketWithResendTimer(mySocket, SYNACK, 0, 0, windowsize, NULL, &otherAddress, &timerList, deltaTime);
 					printf(ANSI_WHITE"LISTEN GOING TO SYN_RECEIVED\n"ANSI_RESET);
 					state = SYN_RECEIVED;
 				}
@@ -156,26 +157,30 @@ int main() {
 				if (deltaTime - tTimeout > NO_MESSAGE_TIMEOUT) { // TIMEOUT! if we haven't got any response in a certain time
 					printf(ANSI_WHITE"NO MESSAGE RECEIVED. WAIT GOING TO INIT\n"ANSI_RESET);
 	 				state = INIT;
+	 				// Prints result
 					printf(" - - - - %s - - - -\n", finalBuffer);
+					// Free and reset variables
 					free(finalBuffer);
 					resendCount = 0;
 					finalBuffer = NULL;
 				}
-				else if(receiveStatus != RECEIVE_TIMEOUT && packet.flags == FRAME){
+				else if(receiveStatus != RECEIVE_TIMEOUT && packet.flags == FRAME){ // Checks if we received a FRAME
 					tTimeout = deltaTime;
 					printf(ANSI_WHITE"WAIT GOING TO FRAME_RECEIVED\n"ANSI_RESET);
 					state = FRAME_RECEIVED;
-					while(state != WAIT){
+					// Loops through all the necessary states to handle the received FRAME
+					while(state != WAIT) {
 						switch (state) {
 							case FRAME_RECEIVED:
-								if (receiveStatus == RECEIVE_BROKEN){
+								// SEND NACK ON BROKEN FRAME
+								if (receiveStatus == RECEIVE_BROKEN) {
 									createAndSendPacket(mySocket, NACK, 0, packet.seq, windowsize, NULL, &otherAddress);
-								/*		createPacket(&packet, NACK, 0, packet.seq, windowsize, NULL);
-										sendPacket(mySocket, &packet, &otherAddress, 0);*/
 									printf(ANSI_WHITE"FRAME_RECEIVED GOING TO WAIT - FRAME BROKEN SENDING NACK\n"ANSI_RESET);
 									state = WAIT;
 								}
-								else if (((slidingWindowIndexFirst <= slidingWindowIndexLast) && (packet.seq >= slidingWindowIndexFirst) && (packet.seq <= slidingWindowIndexLast)) || (slidingWindowIndexFirst > slidingWindowIndexLast && ((packet.seq >= slidingWindowIndexFirst && packet.seq <= maxSequence-1) || (packet.seq <= slidingWindowIndexLast && packet.seq >= 0)))) {
+								// Checks if frame is inside or outside our current window
+								else if (((slidingWindowIndexFirst <= slidingWindowIndexLast) && (packet.seq >= slidingWindowIndexFirst) && (packet.seq <= slidingWindowIndexLast)) ||
+												 (slidingWindowIndexFirst > slidingWindowIndexLast && ((packet.seq >= slidingWindowIndexFirst && packet.seq <= maxSequence-1) || (packet.seq <= slidingWindowIndexLast && packet.seq >= 0)))) {
 									// INSIDE WINDOW
 									removePacketTimerBySeq(&timerList, packet.seq);
 									printf(ANSI_WHITE"FRAME_RECEIVED GOING TO FRAME_IN_WINDOW\n"ANSI_RESET);
@@ -189,12 +194,14 @@ int main() {
 								}
 								break;
 							case FRAME_IN_WINDOW:
-								if(packet.seq == slidingWindowIndexFirst){
+								if(packet.seq == slidingWindowIndexFirst) { // Check if this frame is first in the window
 									printf(ANSI_WHITE"FRAME_IN_WINDOW GOING TO MOVE_WINDOW - FRAME IS FIRST\n"ANSI_RESET);
 									state = MOVE_WINDOW;
 								}
 								else{
+									// Checks if sequence is already buffered
 									if (!isAlreadyBuffered(windowBuffer, windowsize-1, packet.seq)) {
+										// Loops through buffer to find a unused space to place the packet in
 										for(int i = 0; i < windowsize-1;i++){
 											if(windowBuffer[i].seq==-1){
 												windowBuffer[i]=packet;
@@ -205,45 +212,48 @@ int main() {
 									}
 									state = WAIT;
 								}
+								// Sends ACK on the received frame
 								createAndSendPacket(mySocket, ACK, 0, packet.seq, windowsize, NULL, &otherAddress);
-								
-								/*createPacket(&packet, ACK, 0, packet.seq, windowsize, NULL);
-								sendPacket(mySocket, &packet, &otherAddress, 0);*/
 								break;
 							case MOVE_WINDOW:
-								if (finalBuffer == NULL)
+								if (finalBuffer == NULL) // Initializing finalBuffer to appropriate length if its NULL
 									finalBuffer = malloc(strlen(packet.data) + 1);
-								else
+								else // Makes the finalBuffer longer to fit more data
 									finalBuffer = (char*)realloc(finalBuffer, strlen(finalBuffer)+strlen(packet.data)+1);
-								if (finalBuffer == NULL)
+								if (finalBuffer == NULL) // Checks if malloc/realloc occured any error
 									fatalerror("Failed to malloc/realloc finalBuffer");
+								// Add data to finalBuffer
 								strcat(finalBuffer, packet.data);
+								// Moves the window indexes and wrap around at MAX SEQUENCE
 								slidingWindowIndexFirst = (slidingWindowIndexFirst+1) % maxSequence;
 								slidingWindowIndexLast = (slidingWindowIndexLast+1) % maxSequence;
+								
 								printf(ANSI_WHITE"MOVE_WINDOW GOING TO BUFFER\n"ANSI_RESET);
 								state = BUFFER;
-							
 								break;
 							case BUFFER:
+								// Loops through windowBuffer and checks if something buffered is first in window
 								for(i = 0; i < windowsize-1;i++){
 									if(windowBuffer[i].seq == slidingWindowIndexFirst){
 										state = MOVE_WINDOW;
-										packet = windowBuffer[i];
+										packet = windowBuffer[i]; // Set the current packet to the one in buffer
 										printf(ANSI_WHITE"BUFFER GOING TO MOVE_WINDOW\n"ANSI_RESET);
 										windowBuffer[i].seq = -1;
 										break;
 									}
-								}	
+								}
+								// If we haven't changed state, then there is nothing in buffer, just move to WAIT
 								if(state != MOVE_WINDOW){
-								printf(ANSI_WHITE"BUFFER GOING TO WAIT - NO FRAME IN BUFFER IS FIRST IN WINDOW\n"ANSI_RESET);
-								state = WAIT;
+									printf(ANSI_WHITE"BUFFER GOING TO WAIT - NO FRAME IN BUFFER IS FIRST IN WINDOW\n"ANSI_RESET);
+									state = WAIT;
 								}
 								break;
-						
 						}
 					}
 				}
-				else if (receiveStatus == RECEIVE_OK && packet.flags == FIN){
+				// Checks if packet is FIN (BEGIN TEARDOWN)
+				else if (receiveStatus == RECEIVE_OK && packet.flags == FIN) {
+					// Sends ACK on the FIN
 					createAndSendPacket(mySocket, ACK, 0, packet.seq, windowsize, NULL, &otherAddress);
 					
 					printf(ANSI_WHITE"DATA RECEIVE STATE GOING TO CLOSE_WAIT\n"ANSI_RESET);
@@ -258,27 +268,28 @@ int main() {
 					free(windowBuffer);
 					windowBuffer = NULL;
 					resendCount = 0;
-					}
+				}
 				break;
 			
 			//TEARDOWN
 		
 			case CLOSE_WAIT:
+				// SENDS FIN
 				createAndSendPacketWithResendTimer(mySocket, FIN, 0, packet.seq, windowsize, NULL, &otherAddress, &timerList, deltaTime);
-				/*createPacket(&packet, FIN, 0, packet.seq, windowsize, NULL);
-				sendPacket(mySocket, &packet, &otherAddress, 0);
-				addPacketTimer(&timerList, &packet, &otherAddress, deltaTime);*/
+				
 				printf(ANSI_WHITE"CLOSE_WAIT GOING TO LAST_ACK\n"ANSI_RESET);
 				state = LAST_ACK;
 				break;
 			
-			case LAST_ACK:
+			case LAST_ACK: // WAITS FOR LAST ACK TO ARRIVE OR TIMEOUT
+				// TIMEOUT if too many packets has been sent
 				if (resendCount >= MAX_RESENDS){
 					removePacketTimerBySeq(&timerList, packet.seq);
 					resendCount = 0;
 					state = INIT;
 					printf(ANSI_WHITE "MAX RESENDS REACHED - LAST_ACK GOING TO CLOSED\n"ANSI_RESET);
 				}
+				// Checks if packet is ACK and then go back to INIT (RESTART)
 				else if (receiveStatus == RECEIVE_OK && packet.flags == ACK){
 					removePacketTimerBySeq(&timerList, packet.seq);
 					resendCount = 0;
@@ -291,12 +302,15 @@ int main() {
 				fatalerror("Server entered incorrect state");
 				break;
 		}
-		fflush(stdout);
+		fflush(stdout); // Flushes the output to terminal
+		// Wait a certain time for a packet or timeout and catch the result
 		receiveStatus = receivePacketOrTimeout(mySocket, &packet, &otherAddress, HEARTBEAT_TIMEOUT);
 		
+		// UPDATES CLOCK
 		clock_gettime(CLOCK_MONOTONIC, &stop);
 		deltaTime = (stop.tv_sec * 1000 + stop.tv_nsec / 1000000) - (start.tv_sec * 1000 + start.tv_nsec / 1000000);
-
+		
+		// Updates all timers in timerList and resends them when they reach their timeout
 		updateTimers(mySocket, &timerList, deltaTime, &resendCount);
 	}
 	return 0;

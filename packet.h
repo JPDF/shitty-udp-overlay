@@ -6,7 +6,7 @@
 #include <sys/types.h>
 #include <netinet/in.h>
 
-#define RESEND_TIMEOUT 10
+#define RESEND_TIMEOUT 1000
 
 // FLAGS
 #define SYN 1
@@ -78,16 +78,36 @@ void createAndSendPacketWithResendTimer(int mySocket, int flags, int id, int seq
  * Returns: 1 if broken else 0 */
 int isPacketBroken(struct packet *packet);
 
-
+/* Add a packet timer at the end of the list
+ * Parameters:
+ *	list: The timer list for the packet to be added to
+ *	packet: The packet to be added to the list
+ *	address: The address to be used at resend
+ *	startTime: The time this function is called */
 void addPacketTimer(TimerList *list, const struct packet *packet, const struct sockaddr_in *address, time_t startTime);
 
+/* Removes the first packet timer in the list */
 void removeFirstPacketTimer(TimerList *list);
+/* Removes a specific packet timer in the list by sequence */
 void removePacketTimerBySeq(TimerList *list, int seq);
 
+/* Resends a specific packet timer by sequence
+ * Parameters:
+ *	socket: The socket to be used by send
+ *	list: The timer list...
+ *	time: The time when this function is called
+ *	seq: The sequence to look for */
 void resendPacketBySeq(int socket, TimerList *list, time_t time, int seq);
 
+// Removes all packet timer in timerlist...
 void removeAllFromTimerList(TimerList *list);
 
+/* Check if packet timer has timed out and updates it
+ * Parameters:
+ *	socket: The socket to be used by send
+ *	list: The timer list...
+ *	time: The time when this function was called
+ *	resendCount: Counts up if resending */
 void updateTimers(int socket, TimerList *list, time_t time, int *resendCount);
 
 

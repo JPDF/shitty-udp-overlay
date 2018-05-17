@@ -16,11 +16,6 @@
 #define ANSI_RESET   "\x1b[0m"
 #define clear() printf("\033[H\033[J")
 
-struct client {
-	int id;
-	int windowsize;
-};
-
 void fatalerror(char *message);
 
 void printBits(unsigned int bits);
