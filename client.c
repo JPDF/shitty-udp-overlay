@@ -13,10 +13,9 @@
 
 // SETTINGS
 #define HEARTBEAT_TIMEOUT 1
-#define TIMEOUT 1000 // The time before timeout on each packet in milliseconds
 #define MAX_RESENDS 10
 #define MAX_SEQUENCE 8
-#define MAX_WINDOWSIZE MAX_SEQUENCE / 2 - 1
+#define MAX_WINDOWSIZE MAX_SEQUENCE / 2
 #define ACK_SENT_TIMEOUT 5000
 #define FIN_WAIT_2_TIMEOUT ACK_SENT_TIMEOUT
 #define WAIT_TIMEOUT 10000
@@ -45,7 +44,11 @@
 
 #define MAX_MESSAGE 101
 
-
+/* Hacks a message into appropriate length to fit a packet
+ * Parameters:
+ *	message: The message to be hacked
+ *	data: The double array to store the hacked message
+ *	dataLength: The length of the data */
 void hackAndSlashMessage(char *message, char **data, int dataLength){
 	int chunklen;
 	int i;
@@ -60,6 +63,12 @@ void hackAndSlashMessage(char *message, char **data, int dataLength){
 	}
 }
 
+/* Check if the sequence already exist in the buffer array
+ * Parameters:
+ *	buffer: The buffer array
+ *	size: The size of the buffer array
+ *	seq: The sequence to search for
+ * Returns: 1 if found, else 0 */ 
 int isAlreadyBuffered(int *buffer, int size, int seq) {
 	int i;
 	for (i = 0; i < size; i++) {
@@ -151,7 +160,7 @@ int main(int argc, char **argv) {
 					windowsize = packet.windowsize;
 					slidingWindowIndexLast = packet.windowsize-1;
 					buffersize = windowsize - 1;
-					maxSequence = (packet.windowsize + 1)*2;
+					maxSequence = packet.windowsize*2;
 					printf("%d\n", maxSequence);
 					windowBuffer = malloc(sizeof(int) * (windowsize - 1));
 					for (i = 0; i < buffersize; i++)

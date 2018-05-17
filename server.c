@@ -12,7 +12,7 @@
 
 // SETTINGS
 #define PORT 5555
-#define TIMEOUT 1000 // The time before timeout in milliseconds
+#define HEARTBEAT_TIMEOUT 1000 // The time before timeout in milliseconds
 #define MAX_RESENDS 10
 #define NO_MESSAGE_TIMEOUT 10000 //time before the client is considered to have disconnected out of order
 
@@ -31,8 +31,12 @@
 #define LAST_ACK 21
 //SLIDING WINDOW SIZE
 #define MAX_SEQUENCE 10
-#define WINDOW_SIZE (MAX_SEQUENCE/2)-1
+#define WINDOW_SIZE (MAX_SEQUENCE/2)
 
+/* Creates a socket with specific port and binds it
+ * Parameters:
+ *	port: The port to be bound to
+ * Returns: The created socket */
 int makeSocket(int port) {
 	int mySocket;
 	struct sockaddr_in address;
@@ -51,9 +55,12 @@ int makeSocket(int port) {
 	return mySocket;
 }
 
-/* Handles received packets and set the state accordingly.
-   Packet is NULL if timeout occured */
-   
+/* Check if the sequence already exist in the buffer array
+ * Parameters:
+ *	buffer: The buffer array
+ *	size: The size of the buffer array
+ *	seq: The sequence to search for
+ * Returns: 1 if found, else 0 */   
 int isAlreadyBuffered(struct packet *buffer, int size, int seq) {
 	int i;
 	for (i = 0; i < size; i++) {
@@ -81,22 +88,21 @@ int main() {
 	time_t deltaTime = 0, tTimeout = 0;
 	char *finalBuffer = NULL;
 	
-	createPacket(&packet, SYN, 0, 100, 200, "bla");
-	if (!isPacketBroken(&packet))
-		printf("Packet is not broken, hurray!\n");
-	
-	srand(time(NULL));
-	clock_gettime(CLOCK_MONOTONIC, &start);
+	srand(time(NULL)); // Initializing rand function
+	clock_gettime(CLOCK_MONOTONIC, &start); // Get the start time of the program
 	// Event handling loop
 	while (1) {
 		switch (state) {
+			// CONNECTION
 			case INIT:
+				// Reinitializing variables
 				windowsize = WINDOW_SIZE;
 				maxSequence = MAX_SEQUENCE;
+				// Loop the menu where to choose error (what should go wrong) until a valid one is chosen
 				while(state == INIT){
 					printf("How do you want to mess up?\n0. Everything like heaven\n1. Lost frames\n2. Broken crc\n3. CHAOS!!1!!\n");
 					scanf("%d%*c", &error);
-					if(error >= 0 && error <= 3){
+					if(error >= 0 && error <= 3) {
 						printf(ANSI_WHITE"WAITING FOR CONNECTION..."ANSI_RESET "\n");
 						state = LISTEN;
 					}
@@ -105,36 +111,38 @@ int main() {
 				}
 				break;
 
-			case LISTEN:
+			case LISTEN: // LISTEN FOR A SYN
 				if (receiveStatus == RECEIVE_OK && packet.flags == SYN) {
-					if(windowsize > packet.windowsize){
+					/* Determine which windowsize to choose, if our is bigger than the requested,
+						 then use the requested one */
+					if(windowsize > packet.windowsize) {
 						windowsize = packet.windowsize;
-						maxSequence = 2*(packet.windowsize+1);
+						maxSequence = 2*packet.windowsize;
 					}
 					
 					createAndSendPacketWithResendTimer(mySocket,SYNACK, 0, 0, windowsize, NULL, &otherAddress, &timerList, deltaTime);
-					/*createPacket(&packet, SYNACK, 0, 0, windowsize, NULL);
-					sendPacket(mySocket, &packet, &otherAddress, 0);
-					addPacketTimer(&timerList, &packet, &otherAddress, deltaTime);*/
 					printf(ANSI_WHITE"LISTEN GOING TO SYN_RECEIVED\n"ANSI_RESET);
 					state = SYN_RECEIVED;
 				}
 				break;
-			case SYN_RECEIVED:
-				if (resendCount >= MAX_RESENDS){
+				
+			case SYN_RECEIVED: // RECEIVED A SYN, SENT SYNACK, WAITS FOR ACK
+				if (resendCount >= MAX_RESENDS) { // Gives up if we have resent too many times
 					removePacketTimerBySeq(&timerList, packet.seq);
 					resendCount = 0;
 					state = INIT;
 					printf(ANSI_WHITE"CONNECTION TIMEOUT GOING TO CLOSED\n"ANSI_RESET);
 				}
-				else if (receiveStatus == RECEIVE_OK && packet.flags == ACK){
+				else if (receiveStatus == RECEIVE_OK && packet.flags == ACK) {
 					removePacketTimerBySeq(&timerList, packet.seq);
+					// Initializing the windowBuffer when ack is received
 					if((windowBuffer=malloc(sizeof(struct packet)*(windowsize-1))) == NULL)
 						fatalerror("malloc of windowBuffer failed");
 					for(i = 0; i < windowsize-1;i++){
 						windowBuffer[i].seq = -1;
 					}
-					tTimeout = deltaTime;
+					
+					tTimeout = deltaTime; // Start timer from this point
 					resendCount = 0;
 					state = WAIT;
 					printf(ANSI_WHITE"CONNECTION SUCCESS GOING TO DATA TRANSMISSION\n"ANSI_RESET);
@@ -143,10 +151,9 @@ int main() {
 				slidingWindowIndexFirst=0;
 				break;
 			
-			//sliding window
-			
+			//SLIDING WINDOW			
 			case WAIT:
-				if (deltaTime - tTimeout > NO_MESSAGE_TIMEOUT) { // TIMEOUT!
+				if (deltaTime - tTimeout > NO_MESSAGE_TIMEOUT) { // TIMEOUT! if we haven't got any response in a certain time
 					printf(ANSI_WHITE"NO MESSAGE RECEIVED. WAIT GOING TO INIT\n"ANSI_RESET);
 	 				state = INIT;
 					printf(" - - - - %s - - - -\n", finalBuffer);
@@ -238,16 +245,19 @@ int main() {
 				}
 				else if (receiveStatus == RECEIVE_OK && packet.flags == FIN){
 					createAndSendPacket(mySocket, ACK, 0, packet.seq, windowsize, NULL, &otherAddress);
-					/*
-					createPacket(&packet, ACK, 0, packet.seq, windowsize, NULL);
-					sendPacket(mySocket, &packet, &otherAddress, 0);*/
+					
 					printf(ANSI_WHITE"DATA RECEIVE STATE GOING TO CLOSE_WAIT\n"ANSI_RESET);
 					state = CLOSE_WAIT;
+					// Prints the result
 					printf(" - - - - %s - - - -\n", finalBuffer);
 					printf("! ! ! %d ! ! !\n", maxSequence);
+					
+					// Free all used buffer and reset variables
 					free(finalBuffer);
-					resendCount = 0;
 					finalBuffer = NULL;
+					free(windowBuffer);
+					windowBuffer = NULL;
+					resendCount = 0;
 					}
 				break;
 			
@@ -282,7 +292,7 @@ int main() {
 				break;
 		}
 		fflush(stdout);
-		receiveStatus = receivePacketOrTimeout(mySocket, &packet, &otherAddress, TIMEOUT);
+		receiveStatus = receivePacketOrTimeout(mySocket, &packet, &otherAddress, HEARTBEAT_TIMEOUT);
 		
 		clock_gettime(CLOCK_MONOTONIC, &stop);
 		deltaTime = (stop.tv_sec * 1000 + stop.tv_nsec / 1000000) - (start.tv_sec * 1000 + start.tv_nsec / 1000000);

@@ -6,7 +6,7 @@
 #include <sys/types.h>
 #include <netinet/in.h>
 
-#define RESEND_TIMEOUT 1000
+#define RESEND_TIMEOUT 10
 
 // FLAGS
 #define SYN 1
