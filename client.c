@@ -120,6 +120,8 @@ int main(int argc, char **argv) {
 	
 		switch (state) {
 			case CLOSED:
+				// Reset timer list
+				removeAllFromTimerList(&timerList);
 				//sets the initial values used in #DEFINE 
 				maxSequence=MAX_SEQUENCE;
 				windowsize = MAX_WINDOWSIZE;
@@ -162,7 +164,7 @@ int main(int argc, char **argv) {
 				state = SYN_SENT;
 				break;
 			case SYN_SENT:
-				if (packet.flags == SYNACK) {
+				if (receiveStatus == RECEIVE_OK && packet.flags == SYNACK) {
 					removePacketTimerBySeq(&timerList, packet.seq);
 					// saving settings from server to our local variables
 					windowsize = packet.windowsize;
@@ -192,8 +194,11 @@ int main(int argc, char **argv) {
 				break;
 				
 			case ACK_SENT:
+				if (receiveStatus == RECEIVE_BROKEN) {
+					tTimeout = deltaTime;
+				}
 				//checks if the select function returned a OK state and if the flag is SYNACK
-				if (receiveStatus == RECEIVE_OK && packet.flags == SYNACK) {
+				else if (receiveStatus == RECEIVE_OK && packet.flags == SYNACK) {
 					tTimeout = deltaTime;
 					resendCount++;
 					createAndSendPacket(mySocket, ACK, 0, 0, windowsize, NULL, &otherAddress);
@@ -234,7 +239,6 @@ int main(int argc, char **argv) {
 				}
 				//checks if we have reached the maximum allowed inactive time ( we hacent received anything from the server)
 				else if (deltaTime - tTimeout > WAIT_TIMEOUT) {
-					removeAllFromTimerList(&timerList);
 					createAndSendPacketWithResendTimer(mySocket, FIN, 0, currentSeq, windowsize, NULL, &otherAddress, &timerList, deltaTime);
 					printf(ANSI_WHITE"WAIT GOING TO FIN_WAIT_1 - NO RESPONSE FROM SERVER"ANSI_RESET);
 					state = FIN_WAIT_1;
@@ -243,6 +247,10 @@ int main(int argc, char **argv) {
 				if (receiveStatus == RECEIVE_OK && packet.flags == NACK) {
 					tTimeout=deltaTime;
 					resendPacketBySeq(mySocket, &timerList, deltaTime, packet.seq);
+				}
+				// checks if packet is broken, then just reset the timer
+				else if (receiveStatus == RECEIVE_BROKEN) {
+					tTimeout = deltaTime;
 				}
 				//checks if select returns an OK and if the flag is set to ACK, then we move to ACK_RECEIVED.
 				else if(receiveStatus == RECEIVE_OK && packet.flags == ACK) {
